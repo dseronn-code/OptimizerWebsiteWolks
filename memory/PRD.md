@@ -10,8 +10,8 @@ Criar um website profissional para Wolks Optimizer, empresa de otimização de c
 - Animações 3D interativas
 - Informações detalhadas sobre cada tipo de otimização
 - Seções sobre requisitos e processo passo a passo
-- Formas de contato: Instagram (@wolks.optimizer), Twitter (@wolksoptimizer), Email (d.seronn@gmail.com)
-- Preço: R$ 260,00 dividido em 2x
+- Preço: R$ 10 (Básica), R$ 20 (Média), R$ 25 (Avançada) - Todas divididas obrigatoriamente em 2x
+- Formas de contato: Instagram (@wolks.optimizer), Twitter (@wolksoptimizer), Email (dseronn@gmail.com)
 
 ## User Personas
 
@@ -185,10 +185,14 @@ Converter visitantes em clientes através de comunicação clara dos benefícios
 - CTAs mais clicados
 
 ### Revenue Model
-- Serviço: R$ 260,00 por otimização
-- Pagamento: 2x sem juros via PIX
-- 50% ao agendar + 50% no dia do serviço
-- Modelo vitalício (não recorrente)
+- **Otimização Simples:** R$ 10,00 (dividido obrigatoriamente em 2x)
+- **Otimização Média:** R$ 20,00 (dividido obrigatoriamente em 2x)
+- **Otimização Avançada:** R$ 25,00 (dividido obrigatoriamente em 2x)
+- **Pagamento:** Obrigatoriamente em 2 parcelas
+  - 50% antes da otimização
+  - 50% depois da otimização
+- **Formas de pagamento:** PIX, Cartão de Crédito (MercadoPago), Wise (internacional), Transferência bancária
+- **Modelo:** Vitalício (não recorrente)
 
 ## Design Decisions
 
@@ -237,6 +241,15 @@ Converter visitantes em clientes através de comunicação clara dos benefícios
 - Sharp corners para estética tech/cyberpunk
 
 ## Changelog
+
+### 2025-01-15 - Price Update & Email Correction
+- ✅ Preços atualizados:
+  - Otimização Simples: R$ 10
+  - Otimização Média: R$ 20
+  - Otimização Avançada: R$ 25
+- ✅ Todas as otimizações agora são obrigatoriamente divididas em 2x (antes e depois)
+- ✅ Email corrigido de d.seronn@gmail.com para dseronn@gmail.com
+- 🎯 Status: **Ready for Production**
 
 ### 2025-01-15 - MVP Complete
 - ✅ Criado estrutura completa de 5 páginas
