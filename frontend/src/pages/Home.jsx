@@ -146,13 +146,13 @@ const Home = () => {
                   color: 'var(--brand-primary)',
                   marginBottom: '4px'
                 }}>
-                  R$ 260
+                  A partir de R$ 10
                 </div>
                 <div style={{
                   fontSize: '14px',
                   color: 'var(--text-muted)'
                 }}>
-                  Pagamento em 2x
+                  Dividido em 2x obrigatório
                 </div>
               </div>
               <div>

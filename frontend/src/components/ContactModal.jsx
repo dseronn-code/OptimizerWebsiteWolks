@@ -164,7 +164,7 @@ const ContactModal = ({ isOpen, onClose }) => {
           </a>
 
           <a
-            href="mailto:d.seronn@gmail.com"
+            href="mailto:dseronn@gmail.com"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -202,7 +202,7 @@ const ContactModal = ({ isOpen, onClose }) => {
                 Email
               </div>
               <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                d.seronn@gmail.com
+                dseronn@gmail.com
               </div>
             </div>
           </a>

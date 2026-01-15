@@ -161,7 +161,7 @@ const Contact = () => {
 
             {/* Email Card */}
             <a
-              href="mailto:d.seronn@gmail.com"
+              href="mailto:dseronn@gmail.com"
               style={{
                 textDecoration: 'none',
                 background: 'var(--bg-secondary)',
@@ -206,7 +206,7 @@ const Contact = () => {
                 marginBottom: '12px',
                 fontWeight: 600
               }}>
-                d.seronn@gmail.com
+                dseronn@gmail.com
               </p>
               <p style={{
                 fontSize: '16px',

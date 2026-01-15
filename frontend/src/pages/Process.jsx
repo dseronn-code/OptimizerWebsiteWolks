@@ -288,13 +288,13 @@ const Process = () => {
                   color: 'var(--brand-primary)',
                   marginBottom: '8px'
                 }}>
-                  R$ 260
+                  R$ 10 - R$ 25
                 </div>
                 <div style={{
                   fontSize: '16px',
                   color: 'var(--text-secondary)'
                 }}>
-                  Total do serviço
+                  Conforme o tipo
                 </div>
               </div>
               <div style={{
@@ -315,7 +315,7 @@ const Process = () => {
                   fontSize: '16px',
                   color: 'var(--text-secondary)'
                 }}>
-                  Sem juros via PIX
+                  Obrigatoriamente dividido
                 </div>
               </div>
               <div style={{
@@ -336,7 +336,7 @@ const Process = () => {
                   fontSize: '16px',
                   color: 'var(--text-secondary)'
                 }}>
-                  Pago ao agendar
+                  Antes da otimização
                 </div>
               </div>
               <div style={{
@@ -357,7 +357,7 @@ const Process = () => {
                   fontSize: '16px',
                   color: 'var(--text-secondary)'
                 }}>
-                  No dia da otimização
+                  Depois da otimização
                 </div>
               </div>
             </div>

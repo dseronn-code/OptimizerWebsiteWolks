@@ -9,7 +9,7 @@ const Services = () => {
     {
       name: 'Otimização Simples',
       description: 'Ideal para computadores de entrada',
-      price: 'Consulte',
+      price: 'R$ 10',
       features: [
         'Remoção de programas que consomem desempenho',
         'Limpeza de arquivos temporários',
@@ -22,7 +22,7 @@ const Services = () => {
     {
       name: 'Otimização Média',
       description: 'O mais popular - equilíbrio perfeito',
-      price: 'R$ 260',
+      price: 'R$ 20',
       featured: true,
       features: [
         'Tudo da Otimização Simples',
@@ -37,7 +37,7 @@ const Services = () => {
     {
       name: 'Otimização Avançada',
       description: 'Máximo desempenho possível',
-      price: 'R$ 260',
+      price: 'R$ 25',
       features: [
         'Tudo da Otimização Média',
         'Otimização completa da BIOS',
@@ -144,15 +144,13 @@ const Services = () => {
                 }}>
                   {service.price}
                 </div>
-                {service.price.includes('260') && (
-                  <p style={{
-                    fontSize: '14px',
-                    color: 'var(--text-muted)',
-                    marginBottom: '24px'
-                  }}>
-                    Dividido em 2x sem juros
-                  </p>
-                )}
+                <p style={{
+                  fontSize: '14px',
+                  color: 'var(--text-muted)',
+                  marginBottom: '24px'
+                }}>
+                  Dividido obrigatoriamente em 2x
+                </p>
 
                 <div style={{
                   background: 'var(--bg-primary)',

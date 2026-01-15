@@ -107,7 +107,7 @@ const Footer = () => {
             Contato
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <a href="mailto:d.seronn@gmail.com" style={{
+            <a href="mailto:dseronn@gmail.com" style={{
               color: 'var(--text-secondary)',
               textDecoration: 'none',
               fontSize: '16px',
@@ -120,7 +120,7 @@ const Footer = () => {
             onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
             >
               <Mail size={18} />
-              d.seronn@gmail.com
+              dseronn@gmail.com
             </a>
             <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
               <a
