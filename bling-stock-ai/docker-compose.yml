@@ -1,0 +1,20 @@
+# Ambiente local: PostgreSQL + aplicação. Para produção, use um PostgreSQL gerenciado
+# e defina as variáveis em um cofre de segredos (não em arquivo versionado).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blingstock
+      POSTGRES_USER: blingstock
+      POSTGRES_PASSWORD: blingstock-local
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  app:
+    build: .
+    depends_on: [db]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://blingstock:blingstock-local@db:5432/blingstock
+    ports: ["3001:3001"]
+volumes:
+  pgdata:
