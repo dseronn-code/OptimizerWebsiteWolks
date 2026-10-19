@@ -4,7 +4,7 @@ import { answerQuestion } from '../ai/agent.js';
 import { audit } from '../audit/audit.js';
 import { changePassword, login, logout } from '../auth/authService.js';
 import { requireUser, send, SESSION_COOKIE, viewerOf, HttpError } from '../auth/guard.js';
-import { config, isProduction } from '../config.js';
+import { aiProvider, config, isProduction } from '../config.js';
 import { pool } from '../db/pool.js';
 import { checkSale } from '../engine/availability.js';
 import { parse } from '../lib/http.js';
@@ -64,7 +64,7 @@ export async function coreRoutes(app: FastifyInstance) {
     const conn = await pool.query('SELECT status, last_refresh_at FROM bling_connection WHERE id = 1');
     return send(reply, {
       appMode: s.appMode,
-      aiEngine: config.ANTHROPIC_API_KEY ? 'llm' : 'local',
+      aiEngine: aiProvider() === 'local' ? 'local' : 'llm',
       bling: conn.rows[0],
       sync: rows.map((r) => ({ ...r, failing: Boolean(r.last_error_at && (!r.last_success_at || r.last_error_at > r.last_success_at)) })),
       settings: { maxBalanceAgeMinutes: s.engine.maxBalanceAgeMinutes, baseMode: s.engine.baseMode },

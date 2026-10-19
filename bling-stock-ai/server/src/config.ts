@@ -29,7 +29,12 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   // Necessário apenas para chaves não vinculadas a um workspace (cabeçalho anthropic-workspace-id).
   ANTHROPIC_WORKSPACE_ID: z.string().optional(),
-  AI_MODEL: z.string().default('claude-opus-5-5'),
+  // Provedor de IA: 'auto' usa Anthropic se houver ANTHROPIC_API_KEY, senão um provedor compatível com
+  // OpenAI se houver AI_BASE_URL + AI_API_KEY (ex.: Groq, Google Gemini — planos gratuitos), senão o local.
+  AI_PROVIDER: z.enum(['auto', 'anthropic', 'openai_compat', 'local']).default('auto'),
+  AI_BASE_URL: z.string().optional(),
+  AI_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().optional(),
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
 
   // Executa jobs/agendamentos dentro do processo web (simplifica implantação pequena).
@@ -43,6 +48,15 @@ export const config = schema.parse(process.env);
 export type Config = typeof config;
 
 export const isProduction = config.NODE_ENV === 'production';
+export type AiProvider = 'anthropic' | 'openai_compat' | 'local';
+
+export function aiProvider(): AiProvider {
+  if (config.AI_PROVIDER !== 'auto') return config.AI_PROVIDER;
+  if (config.ANTHROPIC_API_KEY) return 'anthropic';
+  if (config.AI_BASE_URL && config.AI_API_KEY && config.AI_MODEL) return 'openai_compat';
+  return 'local';
+}
+
 export const blingConfigured = Boolean(
   config.BLING_CLIENT_ID && config.BLING_CLIENT_SECRET && config.BLING_REDIRECT_URI,
 );

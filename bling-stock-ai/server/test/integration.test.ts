@@ -1,4 +1,9 @@
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { answerQuestion } from '../src/ai/agent.js';
+import { simplifySchema } from '../src/ai/openaiCompatAgent.js';
+import { config } from '../src/config.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createUser } from '../src/auth/authService.js';
@@ -283,5 +288,52 @@ describe('API: autenticação, perfis e webhooks', () => {
     expect(asSeller1?.lines[0].customerName).toBe('Cliente de outro vendedor');
     const asManager = await getAvailability(PRODUCT, { viewer: manager });
     expect(asManager?.lines[0].customerName).toBe('Cliente Sigiloso');
+  });
+});
+
+describe('IA via provedor compatível com OpenAI (Groq, Gemini…)', () => {
+  it('executa a ferramenta pedida pelo modelo e usa os números do motor', async () => {
+    const requests: any[] = [];
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const json = JSON.parse(body);
+        requests.push({ auth: req.headers.authorization, url: req.url, body: json });
+        const last = json.messages[json.messages.length - 1];
+        const message =
+          last.role === 'tool'
+            ? { role: 'assistant', content: `Resposta: ${JSON.parse(last.content).verificacao.mensagem}` }
+            : { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'verificar_venda', arguments: '{"produto":"TST-1","quantidade":4}' } }] };
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ choices: [{ message, finish_reason: last.role === 'tool' ? 'stop' : 'tool_calls' }] }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const saved = { ...config };
+    Object.assign(config, {
+      AI_PROVIDER: 'openai_compat',
+      AI_BASE_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
+      AI_API_KEY: 'chave-gratis-teste',
+      AI_MODEL: 'modelo-teste',
+    });
+    try {
+      const r = await answerQuestion('posso vender 4 do tst-1?', [], seller1, null);
+      expect(r.engine).toBe('llm');
+      expect(r.answer).toContain('Sim, é possível atender 4');
+      expect(r.toolCalls).toEqual([{ name: 'verificar_venda', input: { produto: 'TST-1', quantidade: 4 } }]);
+      expect(r.cards[0].type).toBe('availability');
+      expect(requests[0].url).toBe('/v1/chat/completions');
+      expect(requests[0].auth).toBe('Bearer chave-gratis-teste');
+      expect(requests[0].body.tools).toHaveLength(11);
+    } finally {
+      Object.assign(config, saved);
+      server.close();
+    }
+  });
+
+  it('simplifica o JSON Schema das ferramentas para provedores mais restritos', () => {
+    const out = simplifySchema({ $schema: 'x', type: 'object', additionalProperties: false, properties: { q: { type: 'number', exclusiveMinimum: 0, pattern: 'a' } }, required: ['q'] });
+    expect(out).toEqual({ type: 'object', properties: { q: { type: 'number', minimum: 0 } }, required: ['q'] });
   });
 });

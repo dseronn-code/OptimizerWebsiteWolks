@@ -14,10 +14,10 @@
 | Interpretação dos compromissos (máquina de estados configurável) | ✅ | Regras de situação + ajustes por pedido |
 | Cálculo confiável de disponibilidade, sem dupla contagem | ✅ | `engine/availability.ts` |
 | "Não confirmada" quando faltam dados | ✅ | idem |
-| Chat com IA + ferramentas determinísticas | ✅ **⏳ modelo de linguagem depende de `ANTHROPIC_API_KEY`**; sem ela, interpretador local | `ai/` |
+| Chat com IA + ferramentas determinísticas | ✅ **⏳ modelo de linguagem depende de uma chave** (Groq/Gemini gratuitos ou Anthropic); sem ela, interpretador local | `ai/` |
 | Explicação detalhada dos saldos | ✅ | página do produto + chat |
 | Registro de sincronização | ✅ | Administração › Sincronização |
-| Testes automatizados das regras críticas | ✅ 36 testes | `server/test` |
+| Testes automatizados das regras críticas | ✅ 38 testes | `server/test` |
 | Ambiente de demonstração identificado | ✅ | `npm run seed:demo`, faixa amarela, sufixo `[DEMO]` |
 
 Adiantado da Fase 2 (necessário para testes de concorrência e para o painel): solicitação,
@@ -44,7 +44,7 @@ controle de concorrência, painel de compromissos e alertas operacionais.
 | 14 | Mais de um depósito | `engine.test.ts › 14.`, `integration.test.ts › 14.` |
 | 15 | Saldo divergente ou negativo | `engine.test.ts › 15.` |
 
-Resultado da última execução: **36/36 aprovados** (`npm test`).
+Resultado da última execução: **38/38 aprovados** (`npm test`).
 
 ## Limitações conhecidas e decisões conservadoras
 

@@ -53,7 +53,7 @@ A interface exibe a faixa **"AMBIENTE DE DEMONSTRAÇÃO"** e todos os produtos f
 createdb blingstock_test                       # banco exclusivo de testes (é recriado a cada execução)
 npm test                                       # ou TEST_DATABASE_URL=postgres://… npm test
 ```
-36 testes: os 15 cenários obrigatórios, prevenção de dupla contagem, concorrência, falha de
+38 testes: os 15 cenários obrigatórios, prevenção de dupla contagem, concorrência, falha de
 sincronização, eventos fora de ordem, idempotência de webhooks, autenticação, perfis e privacidade.
 
 ## Produção (conectar ao Bling real)
@@ -66,6 +66,8 @@ sincronização, eventos fora de ordem, idempotência de webhooks, autenticaçã
 4. Entre como administrador → **Administração › Integração Bling** → *Usar Bling real* → *Conectar ao Bling*.
 5. Em **Regras de situação**, defina para cada situação do Bling o significado comercial e se o estoque já foi baixado.
    Até isso ser feito, pedidos nessas situações são descontados por precaução e a disponibilidade aparece como não confirmada.
-6. (Opcional) defina `ANTHROPIC_API_KEY` para respostas com modelo de linguagem; sem ela, o interpretador local responde.
+6. (Opcional) IA: sem configuração, o interpretador local responde (grátis, sem IA). Para usar um modelo de linguagem
+   **gratuito**, crie uma chave no [Groq](https://console.groq.com/keys) ou no [Google AI Studio](https://aistudio.google.com/apikey)
+   e preencha `AI_BASE_URL`, `AI_API_KEY` e `AI_MODEL` (exemplos no `.env.example`). Também funciona com `ANTHROPIC_API_KEY` (pago).
 
 > As credenciais do Bling **nunca** devem ser enviadas por chat, e-mail ou commit. Configure-as diretamente no servidor.
