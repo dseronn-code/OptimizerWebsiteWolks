@@ -27,6 +27,8 @@ const schema = z.object({
   BLING_REQUESTS_PER_SECOND: z.coerce.number().default(3),
 
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Necessário apenas para chaves não vinculadas a um workspace (cabeçalho anthropic-workspace-id).
+  ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   AI_MODEL: z.string().default('claude-opus-5-5'),
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
 

@@ -50,7 +50,14 @@ Dados de: <data/hora> · Status: <confirmada/não confirmada>`;
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY, maxRetries: 2, timeout: 60_000 });
+  if (!client) {
+    client = new Anthropic({
+      apiKey: config.ANTHROPIC_API_KEY,
+      maxRetries: 2,
+      timeout: 60_000,
+      defaultHeaders: config.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': config.ANTHROPIC_WORKSPACE_ID } : undefined,
+    });
+  }
   return client;
 }
 
