@@ -32,6 +32,7 @@ const TYPE_LABEL: Record<string, string> = {
   SYNC_STALE: 'Sincronização interrompida',
   PARTIAL_DELIVERY_NOT_POSTED: 'Entrega sem baixa',
   INSUFFICIENT_FOR_SALE: 'Estoque insuficiente para venda',
+  SIGNUP_PENDING: 'Cadastro aguardando aprovação',
 };
 
 export default function Alerts() {

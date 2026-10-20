@@ -35,6 +35,14 @@ export interface AppSettings {
     staleOpportunityDays: number;
     committedWithoutPostingDays: number;
   };
+  signup: {
+    /** Mostra "Criar conta" na tela de login. */
+    enabled: boolean;
+    /** Conta nova só entra depois que um administrador aprovar. */
+    requireApproval: boolean;
+    /** Domínios de e-mail aceitos (ex.: ["itcomtech.com.br"]); vazio = qualquer domínio. */
+    allowedDomains: string[];
+  };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -50,6 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reservations: { defaultValidityHours: 48, maxValidityDays: 15, expiringSoonHours: 24, autoApproveSellers: false },
   privacy: { sellersSeeAllCustomers: false },
   alerts: { staleOpportunityDays: 5, committedWithoutPostingDays: 3 },
+  signup: { enabled: true, requireApproval: true, allowedDomains: [] },
 };
 
 function merge<T>(base: T, patch: unknown): T {

@@ -191,8 +191,29 @@ function UsersTab() {
     await api.put(`/api/admin/users/${id}`, patch).catch((e) => setError(e.message));
     await load();
   };
+  const pending = users.filter((u) => u.pending_approval);
   return (
     <div className="space-y-4">
+      {pending.length > 0 && (
+        <section className="card border-amber-300 bg-amber-50/60 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-amber-900">Cadastros aguardando aprovação ({pending.length})</h2>
+          <ul className="space-y-2">
+            {pending.map((u) => (
+              <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-3 ring-1 ring-amber-200">
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-900">{u.name}</div>
+                  <div className="truncate text-xs text-slate-500">{u.email ?? u.username} · e-mail confirmado · entra como Vendedor</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn-primary px-3 py-1.5 text-sm" onClick={() => update(u.id, { approve: true })}>Aprovar</button>
+                  <button className="btn-secondary px-3 py-1.5 text-sm" onClick={() => { if (confirm(`Recusar o acesso de ${u.name}?`)) void update(u.id, { approve: false }); }}>Recusar</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-amber-900">Depois de aprovar, ajuste o perfil (Gestor/Administrador) na tabela abaixo, se necessário.</p>
+        </section>
+      )}
       <form onSubmit={create} className="card grid gap-3 p-4 sm:grid-cols-6">
         <input className="input" placeholder="usuário" required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
         <input className="input sm:col-span-2" placeholder="Nome completo" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -209,7 +230,18 @@ function UsersTab() {
           {users.map((u) => (
             <tr key={u.id}>
               <td className="td font-mono text-xs">{u.username}</td>
-              <td className="td">{u.name}{u.locked_until && new Date(u.locked_until) > new Date() && <span className="ml-2 text-xs text-rose-600">bloqueado</span>}</td>
+              <td className="td">
+                {u.name}
+                {u.email && u.email !== u.username && <div className="text-xs text-slate-400">{u.email}</div>}
+                {u.locked_until && new Date(u.locked_until) > new Date() && <span className="ml-2 text-xs text-rose-600">bloqueado</span>}
+                {u.pending_approval && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800">Aguardando aprovação</span>
+                    <button className="btn-primary px-2 py-1 text-xs" onClick={() => update(u.id, { approve: true })}>Aprovar</button>
+                    <button className="btn-secondary px-2 py-1 text-xs" onClick={() => { if (confirm(`Recusar o acesso de ${u.name}?`)) void update(u.id, { approve: false }); }}>Recusar</button>
+                  </div>
+                )}
+              </td>
               <td className="td">
                 <select className="input" value={u.role} onChange={(e) => update(u.id, { role: e.target.value })}>
                   <option value="vendedor">Vendedor</option><option value="gestor">Gestor</option><option value="admin">Administrador</option>
@@ -285,6 +317,20 @@ function SettingsTab({ editable }: { editable: boolean }) {
         {numField('reservations', 'expiringSoonHours', 'Alertar vencimento com antecedência (h)')}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.reservations.autoApproveSellers} onChange={(e) => set('reservations', 'autoApproveSellers', e.target.checked)} /> Aprovar automaticamente reservas de vendedores quando houver saldo confirmado</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.privacy.sellersSeeAllCustomers} onChange={(e) => set('privacy', 'sellersSeeAllCustomers', e.target.checked)} /> Vendedores veem clientes de outros vendedores</label>
+      </section>
+      <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.signup.enabled} onChange={(e) => set('signup', 'enabled', e.target.checked)} /> Permitir "Criar conta" na tela de login</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.signup.requireApproval} onChange={(e) => set('signup', 'requireApproval', e.target.checked)} /> Novas contas precisam de aprovação do administrador</label>
+        <div>
+          <label className="label">Aceitar somente e-mails destes domínios (separe por vírgula; vazio = qualquer)</label>
+          <input
+            className="input"
+            disabled={!editable}
+            placeholder="itcomtech.com.br"
+            defaultValue={s.signup.allowedDomains.join(', ')}
+            onBlur={(e) => set('signup', 'allowedDomains', e.target.value.split(',').map((d) => d.trim()).filter(Boolean))}
+          />
+        </div>
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
         {numField('alerts', 'committedWithoutPostingDays', 'Alerta: pedido confirmado sem baixa após (dias)')}

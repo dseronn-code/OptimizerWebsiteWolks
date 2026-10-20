@@ -1,8 +1,9 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { answerQuestion } from '../ai/agent.js';
 import { audit } from '../audit/audit.js';
-import { changePassword, login, logout } from '../auth/authService.js';
+import { changePassword, createSession, getUserById, login, logout } from '../auth/authService.js';
+import { resendCode, SignupError, signupStatus, startSignup, verifySignup } from '../auth/signupService.js';
 import { requireUser, send, SESSION_COOKIE, viewerOf, HttpError } from '../auth/guard.js';
 import { aiProvider, config, isProduction } from '../config.js';
 import { pool } from '../db/pool.js';
@@ -12,6 +13,10 @@ import { getSettings } from '../lib/settings.js';
 import { searchProducts } from '../stock/productSearch.js';
 import { getAvailability } from '../stock/stockService.js';
 
+function setSessionCookie(reply: FastifyReply, token: string, expires: Date) {
+  reply.setCookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.COOKIE_SECURE ?? isProduction, path: '/', expires });
+}
+
 export async function coreRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ autenticação
   app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -19,17 +24,50 @@ export async function coreRoutes(app: FastifyInstance) {
     const r = await login(body.username, body.password, { ip: req.ip, userAgent: req.headers['user-agent'] });
     if (!r.ok) {
       await audit({ action: r.reason === 'locked' ? 'auth.locked' : 'auth.failed', details: { username: body.username }, ip: req.ip });
-      throw new HttpError(401, r.reason === 'locked' ? 'Usuário temporariamente bloqueado por tentativas inválidas. Tente em 15 minutos.' : 'Usuário ou senha inválidos.');
+      throw new HttpError(
+        r.reason === 'pending' ? 403 : 401,
+        r.reason === 'locked'
+          ? 'Usuário temporariamente bloqueado por tentativas inválidas. Tente em 15 minutos.'
+          : r.reason === 'pending'
+            ? 'Sua conta foi criada e está aguardando aprovação do administrador.'
+            : 'Usuário ou senha inválidos.',
+      );
     }
     await audit({ userId: r.user.id, action: 'auth.login', ip: req.ip });
-    reply.setCookie(SESSION_COOKIE, r.token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.COOKIE_SECURE ?? isProduction,
-      path: '/',
-      expires: r.expiresAt,
-    });
+    setSessionCookie(reply, r.token, r.expiresAt);
     return send(reply, { user: r.user });
+  });
+
+  // ------------------------------------------------------------------ cadastro com código por e-mail
+  const signupWrap = <T>(p: Promise<T>) =>
+    p.catch((err) => {
+      if (err instanceof SignupError) throw new HttpError(err.status, err.message);
+      throw err;
+    });
+
+  app.get('/api/auth/signup', async (_req, reply) => send(reply, await signupStatus()));
+
+  app.post('/api/auth/signup/start', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const body = parse(
+      z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().max(200), password: z.string().max(200) }),
+      req.body,
+    );
+    return send(reply, await signupWrap(startSignup(body, req.ip)));
+  });
+
+  app.post('/api/auth/signup/resend', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const body = parse(z.object({ verificationId: z.string().uuid() }), req.body);
+    return send(reply, await signupWrap(resendCode(body.verificationId, req.ip)));
+  });
+
+  app.post('/api/auth/signup/verify', { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const body = parse(z.object({ verificationId: z.string().uuid(), code: z.string().trim().max(10) }), req.body);
+    const r = await signupWrap(verifySignup(body.verificationId, body.code, req.ip));
+    if (r.status === 'pending_approval') return send(reply, { status: r.status });
+    const user = await getUserById(r.userId);
+    const session = await createSession(r.userId, { ip: req.ip, userAgent: req.headers['user-agent'] });
+    setSessionCookie(reply, session.token, session.expiresAt);
+    return send(reply, { status: r.status, user });
   });
 
   app.post('/api/auth/logout', async (req, reply) => {

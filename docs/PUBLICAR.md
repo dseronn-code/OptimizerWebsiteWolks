@@ -67,3 +67,29 @@ Hospedagem: **Render** (servidor, plano gratuito) + **Neon** (banco PostgreSQL, 
 ### APK (opcional)
 Com o sistema publicado, o site **pwabuilder.com** gera um pacote Android (APK/AAB) a partir do
 endereço, sem programar. Na prática ele abre o mesmo sistema; a instalação pelo Chrome já tem o mesmo efeito.
+
+---
+
+## "Criar conta" com código por e-mail (Brevo, gratuito)
+
+O Railway bloqueia envio de e-mail por SMTP fora do plano Pro, por isso o sistema envia pela API do Brevo
+(grátis até 300 e-mails por dia).
+
+1. Crie a conta em **brevo.com** (plano Free).
+2. **Senders, Domains & Dedicated IPs › Senders › Add a sender**: cadastre o e-mail remetente
+   (ex.: o e-mail da empresa) e confirme pelo link que o Brevo envia para ele.
+3. **SMTP & API › API Keys › Generate a new API key** e copie a chave (começa com `xkeysib-`).
+4. No Railway, em **Variables**, adicione:
+
+   | Variável | Valor |
+   |---|---|
+   | `EMAIL_PROVIDER` | `brevo` |
+   | `EMAIL_FROM` | o e-mail remetente confirmado no passo 2 |
+   | `EMAIL_FROM_NAME` | `ITCOMTECH Estoque` |
+   | `BREVO_API_KEY` | a chave do passo 3 |
+
+5. Deploy. O link **"Criar conta"** aparece na tela de login.
+
+Regras (em *Administração › Parâmetros*): cadastro ligado/desligado, aprovação obrigatória do administrador
+(padrão: ligada) e domínios de e-mail permitidos (ex.: `itcomtech.com.br`). Cadastros pendentes aparecem em
+*Administração › Usuários* e como alerta.

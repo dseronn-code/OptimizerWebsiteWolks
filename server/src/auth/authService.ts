@@ -47,12 +47,13 @@ function toSessionUser(r: any): SessionUser {
   return { id: r.id, username: r.username, name: r.name, role: r.role, blingSellerId: r.bling_seller_id };
 }
 
-export type LoginResult = { ok: true; user: SessionUser; token: string; expiresAt: Date } | { ok: false; reason: 'invalid' | 'locked' };
+export type LoginResult = { ok: true; user: SessionUser; token: string; expiresAt: Date } | { ok: false; reason: 'invalid' | 'locked' | 'pending' };
 
 export async function login(username: string, password: string, meta: { ip?: string; userAgent?: string }): Promise<LoginResult> {
-  const { rows } = await pool.query('SELECT * FROM users WHERE username = lower($1)', [username.trim()]);
+  // aceita o nome de usuário ou o e-mail
+  const { rows } = await pool.query('SELECT * FROM users WHERE username = lower($1) OR lower(email) = lower($1) ORDER BY (username = lower($1)) DESC LIMIT 1', [username.trim()]);
   const u = rows[0];
-  if (!u || !u.active) {
+  if (!u || (!u.active && !u.pending_approval)) {
     await bcrypt.compare(password, DUMMY_HASH);
     return { ok: false, reason: 'invalid' };
   }
@@ -69,12 +70,24 @@ export async function login(username: string, password: string, meta: { ip?: str
     return { ok: false, reason: failed >= MAX_FAILED ? 'locked' : 'invalid' };
   }
   await pool.query('UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = $1', [u.id]);
+  // senha correta, mas a conta criada pelo cadastro ainda não foi aprovada
+  if (u.pending_approval) return { ok: false, reason: 'pending' };
+  const { token, expiresAt } = await createSession(u.id, meta);
+  return { ok: true, user: toSessionUser(u), token, expiresAt };
+}
+
+export async function createSession(userId: string, meta: { ip?: string; userAgent?: string }) {
   const token = randomToken(32);
   const expiresAt = new Date(Date.now() + config.SESSION_TTL_HOURS * 3600000);
   await pool.query('INSERT INTO sessions (token_hash, user_id, expires_at, ip, user_agent) VALUES ($1, $2, $3, $4, $5)', [
-    sha256(token), u.id, expiresAt, meta.ip ?? null, meta.userAgent?.slice(0, 300) ?? null,
+    sha256(token), userId, expiresAt, meta.ip ?? null, meta.userAgent?.slice(0, 300) ?? null,
   ]);
-  return { ok: true, user: toSessionUser(u), token, expiresAt };
+  return { token, expiresAt };
+}
+
+export async function getUserById(id: string): Promise<SessionUser | null> {
+  const { rows } = await pool.query('SELECT id, username, name, role, bling_seller_id FROM users WHERE id = $1 AND active', [id]);
+  return rows[0] ? toSessionUser(rows[0]) : null;
 }
 
 export async function getSessionUser(token: string | undefined): Promise<SessionUser | null> {

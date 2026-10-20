@@ -37,6 +37,13 @@ const schema = z.object({
   BLING_WEBHOOK_SIGNATURE_HEADER: z.string().default('x-bling-signature-256'),
   BLING_REQUESTS_PER_SECOND: z.coerce.number().default(3),
 
+  // E-mail (código de confirmação de cadastro). 'console' = só registra no log (desenvolvimento).
+  EMAIL_PROVIDER: z.enum(['console', 'brevo', 'resend']).default('console'),
+  EMAIL_FROM: z.string().optional(),
+  EMAIL_FROM_NAME: z.string().default('ITCOMTECH Estoque'),
+  BREVO_API_KEY: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+
   ANTHROPIC_API_KEY: z.string().optional(),
   // Necessário apenas para chaves não vinculadas a um workspace (cabeçalho anthropic-workspace-id).
   ANTHROPIC_WORKSPACE_ID: z.string().optional(),

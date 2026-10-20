@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { answerQuestion } from '../src/ai/agent.js';
 import { simplifySchema } from '../src/ai/openaiCompatAgent.js';
 import { config } from '../src/config.js';
+import { setEmailTransportForTests } from '../src/lib/email.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createUser } from '../src/auth/authService.js';
@@ -73,7 +74,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await pool.query(`TRUNCATE reservations, reservation_history, sales_orders, sales_order_items, sales_order_situation_history,
     stock_balances, product_components, products, deposits, situations, situation_rules, sync_state, sync_runs, jobs,
-    webhook_events, alerts, audit_log, query_history, sessions, users, settings, order_overrides, item_fulfillments CASCADE`);
+    webhook_events, alerts, audit_log, query_history, sessions, users, settings, order_overrides, item_fulfillments, email_verifications CASCADE`);
   clearSettingsCache();
   await updateSettings({ appMode: 'demo', reservations: { autoApproveSellers: true } as any }, null);
   fake = new FakeBlingClient(freshState());
@@ -351,5 +352,81 @@ describe('IA via provedor compatível com OpenAI (Groq, Gemini…)', () => {
   it('simplifica o JSON Schema das ferramentas para provedores mais restritos', () => {
     const out = simplifySchema({ $schema: 'x', type: 'object', additionalProperties: false, properties: { q: { type: 'number', exclusiveMinimum: 0, pattern: 'a' } }, required: ['q'] });
     expect(out).toEqual({ type: 'object', properties: { q: { type: 'number', minimum: 0 } }, required: ['q'] });
+  });
+});
+
+describe('cadastro com código por e-mail', () => {
+  const H = { 'x-requested-with': 'bling-stock-ai', 'content-type': 'application/json' };
+  let sent: { to: string; subject: string; text: string }[] = [];
+  const lastCode = () => sent[sent.length - 1].text.match(/\b(\d{6})\b/)![1];
+
+  beforeEach(() => {
+    sent = [];
+    setEmailTransportForTests(async (m) => {
+      sent.push(m);
+    });
+  });
+  afterAll(() => setEmailTransportForTests(null));
+
+  it('envia código, recusa código errado, cria conta pendente e só entra após aprovação', async () => {
+    const app = await buildApp({ logger: false });
+    const start = await app.inject({ method: 'POST', url: '/api/auth/signup/start', headers: H, payload: { name: 'Nova Vendedora', email: 'Nova@Empresa.com.br', password: 'SenhaNova2026' } });
+    expect(start.statusCode).toBe(200);
+    expect(sent[0].to).toBe('nova@empresa.com.br');
+    const { verificationId } = start.json();
+    // a senha não fica salva em texto
+    const stored = await pool.query('SELECT payload::text AS p FROM email_verifications WHERE id = $1', [verificationId]);
+    expect(stored.rows[0].p).not.toContain('SenhaNova2026');
+
+    const wrong = await app.inject({ method: 'POST', url: '/api/auth/signup/verify', headers: H, payload: { verificationId, code: lastCode() === '000000' ? '111111' : '000000' } });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().error).toMatch(/Restam 4/);
+
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/signup/verify', headers: H, payload: { verificationId, code: lastCode() } });
+    expect(ok.json().status).toBe('pending_approval');
+
+    const blocked = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'nova@empresa.com.br', password: 'SenhaNova2026' } });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error).toMatch(/aguardando aprovação/);
+
+    // administrador aprova
+    await createUser({ username: 'adm', name: 'Adm', password: 'SenhaForte123', role: 'admin' });
+    const admLogin = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'adm', password: 'SenhaForte123' } });
+    const cookie = `bsa_session=${admLogin.cookies.find((c) => c.name === 'bsa_session')!.value}`;
+    const users = (await app.inject({ method: 'GET', url: '/api/admin/users', headers: { cookie } })).json().users;
+    const nova = users.find((u: any) => u.email === 'nova@empresa.com.br');
+    expect(nova.pending_approval).toBe(true);
+    await app.inject({ method: 'PUT', url: `/api/admin/users/${nova.id}`, headers: { ...H, cookie }, payload: { approve: true } });
+
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'nova@empresa.com.br', password: 'SenhaNova2026' } });
+    expect(login.statusCode).toBe(200);
+    expect(login.json().user.role).toBe('vendedor');
+    await app.close();
+  });
+
+  it('sem aprovação obrigatória, entra direto após confirmar o código; código não pode ser reutilizado', async () => {
+    await updateSettings({ signup: { requireApproval: false } as any }, null);
+    const app = await buildApp({ logger: false });
+    const { verificationId } = (await app.inject({ method: 'POST', url: '/api/auth/signup/start', headers: H, payload: { name: 'Direto', email: 'direto@empresa.com.br', password: 'SenhaNova2026' } })).json();
+    const code = lastCode();
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/signup/verify', headers: H, payload: { verificationId, code } });
+    expect(ok.json().status).toBe('active');
+    expect(ok.cookies.find((c) => c.name === 'bsa_session')).toBeTruthy();
+    const again = await app.inject({ method: 'POST', url: '/api/auth/signup/verify', headers: H, payload: { verificationId, code } });
+    expect(again.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('respeita domínios permitidos, e-mail duplicado e cadastro desativado', async () => {
+    await updateSettings({ signup: { allowedDomains: ['itcomtech.com.br'] } as any }, null);
+    const app = await buildApp({ logger: false });
+    const other = await app.inject({ method: 'POST', url: '/api/auth/signup/start', headers: H, payload: { name: 'Xavier', email: 'x@gmail.com', password: 'SenhaNova2026' } });
+    expect(other.statusCode).toBe(400);
+    expect(other.json().error).toMatch(/@itcomtech.com.br/);
+    expect(sent).toHaveLength(0);
+    await updateSettings({ signup: { enabled: false } as any }, null);
+    const off = await app.inject({ method: 'POST', url: '/api/auth/signup/start', headers: H, payload: { name: 'Xavier', email: 'x@itcomtech.com.br', password: 'SenhaNova2026' } });
+    expect(off.statusCode).toBe(403);
+    await app.close();
   });
 });
