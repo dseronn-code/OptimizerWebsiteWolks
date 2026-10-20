@@ -1,6 +1,8 @@
-/** Nome exibido no app (tela de login, menu e ícone instalado). Ajuste junto com as cores em index.css. */
+/** Identidade da empresa exibida no app. As cores ficam em index.css (brand-* e accent-*). */
 export const BRAND = {
   appName: 'Estoque Inteligente',
-  company: 'itcomtech',
+  company: 'ITCOMTECH',
   tagline: 'Disponibilidade real de estoque para vendas',
+  logo: '/logo-itcomtech.png',
+  logoOnDark: '/logo-itcomtech-white.png',
 };

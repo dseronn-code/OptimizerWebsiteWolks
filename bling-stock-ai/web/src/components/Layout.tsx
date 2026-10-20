@@ -48,7 +48,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           end={end}
           onClick={() => setOpen(false)}
           className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100'}`
+            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${isActive ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-600 hover:bg-brand-50 hover:text-brand-700'}`
           }
         >
           <Icon size={18} /> {label}
@@ -70,7 +70,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white p-4 md:flex">
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 border-t-4 border-t-brand-600 bg-white p-4 md:flex">
           <Brand />
           <div className="mt-6 flex-1">{nav}</div>
           <Footer user={user} status={status} ordersAt={orders?.last_success_at ?? null} onLogout={logout} />
@@ -89,10 +89,10 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 md:hidden">
-            <button className="btn-secondary px-2" onClick={() => setOpen(true)} aria-label="Abrir menu"><Menu size={18} /></button>
-            <Brand />
-            <span className="text-xs text-slate-500">{ago(orders?.last_success_at)}</span>
+          <header className="flex items-center justify-between border-b-4 border-brand-600 bg-brand-900 px-4 py-2 md:hidden">
+            <button className="rounded-lg p-2 text-white hover:bg-white/10" onClick={() => setOpen(true)} aria-label="Abrir menu"><Menu size={22} /></button>
+            <Brand dark />
+            <span className="text-xs text-brand-200">{ago(orders?.last_success_at)}</span>
           </header>
           <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
         </div>
@@ -101,11 +101,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   );
 }
 
-function Brand() {
+function Brand({ dark = false }: { dark?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <img src="/favicon.svg" alt="" className="h-7 w-7" />
-      <span className="font-semibold text-slate-900">{BRAND.appName}</span>
+    <div className="flex flex-col leading-tight">
+      <img src={dark ? BRAND.logoOnDark : BRAND.logo} alt={BRAND.company} className="h-7 w-auto self-start" />
+      <span className={`mt-1 text-[11px] font-semibold uppercase tracking-wider ${dark ? 'text-brand-200' : 'text-brand-600'}`}>{BRAND.appName}</span>
     </div>
   );
 }

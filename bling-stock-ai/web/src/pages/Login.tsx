@@ -23,13 +23,15 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-gradient-to-br from-brand-50 to-slate-100 p-4">
+    <div className="flex min-h-full flex-col bg-brand-900">
+      <div className="h-1.5 bg-brand-600" />
+      <div className="flex flex-1 items-center justify-center p-4">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4 p-6">
-        <div className="flex items-center gap-3">
-          <img src="/favicon.svg" alt="" className="h-10 w-10" />
+        <div className="flex flex-col items-center gap-2 pb-2 text-center">
+          <img src={BRAND.logo} alt={BRAND.company} className="h-12 w-auto" />
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">{BRAND.appName}</h1>
-            <p className="text-xs text-slate-500">{BRAND.company} · {BRAND.tagline}</p>
+            <h1 className="text-base font-semibold text-brand-900">{BRAND.appName}</h1>
+            <p className="text-xs text-slate-500">{BRAND.tagline}</p>
           </div>
         </div>
         <div>
@@ -43,6 +45,8 @@ export default function Login() {
         {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
         <button className="btn-primary w-full" disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
       </form>
+      </div>
+      <p className="pb-4 text-center text-xs text-brand-200">{BRAND.company} · uso interno</p>
     </div>
   );
 }
