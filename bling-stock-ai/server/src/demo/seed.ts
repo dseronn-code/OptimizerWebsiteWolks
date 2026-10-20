@@ -24,7 +24,8 @@ export const DEMO_USERS = [
 const S = DEMO.situations;
 const P = DEMO.products;
 
-export async function seedDemo(log = console.log) {
+/** `passwordOverride`: em servidor público, as senhas conhecidas da demo são substituídas por esta. */
+export async function seedDemo(log = console.log, passwordOverride?: string) {
   await migrate(pool, log);
   const mode = await pool.query("SELECT value->>'appMode' AS mode FROM settings WHERE key = 'app'");
   if (mode.rows[0]?.mode === 'live') throw new Error('O sistema está em modo live (Bling real). A demonstração não será criada.');
@@ -43,7 +44,7 @@ export async function seedDemo(log = console.log) {
   const users: Record<string, string> = {};
   for (const u of DEMO_USERS) {
     const existing = await pool.query('SELECT id FROM users WHERE username = $1', [u.username]);
-    users[u.username] = existing.rows[0]?.id ?? (await createUser(u)).id;
+    users[u.username] = existing.rows[0]?.id ?? (await createUser({ ...u, password: passwordOverride ?? u.password })).id;
   }
 
   const rules: [number, string, string, string, string][] = [
@@ -110,7 +111,7 @@ export async function seedDemo(log = console.log) {
 
   await scanAlerts();
   log('Demonstração criada. Usuários (somente demo):');
-  for (const u of DEMO_USERS) log(`  ${u.username.padEnd(7)} / ${u.password}  (${u.role})`);
+  for (const u of DEMO_USERS) log(`  ${u.username.padEnd(7)} / ${passwordOverride ? '(senha definida em BOOTSTRAP_ADMIN_PASSWORD)' : u.password}  (${u.role})`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

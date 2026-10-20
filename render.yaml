@@ -1,0 +1,36 @@
+# Publicação no Render (https://render.com) a partir deste repositório.
+# No Render: New → Blueprint → escolha este repositório → preencha os valores pedidos.
+services:
+  - type: web
+    name: itcomtech-estoque
+    runtime: node
+    plan: free
+    rootDir: bling-stock-ai
+    buildCommand: npm ci --include=dev --prefix server && npm ci --include=dev --prefix web && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      # Endereço do banco PostgreSQL (ex.: Neon gratuito) — colar ao criar
+      - key: DATABASE_URL
+        sync: false
+      # Senha do administrador "admin" (e dos usuários da demonstração) — você escolhe
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        value: admin
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      # Carrega dados fictícios de demonstração na primeira vez (mude para false depois)
+      - key: SEED_DEMO_IF_EMPTY
+        value: "true"
+      # IA gratuita (Google Gemini) — opcional
+      - key: AI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: AI_MODEL
+        value: gemini-flash-latest
+      - key: AI_API_KEY
+        sync: false
