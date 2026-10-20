@@ -74,7 +74,7 @@ export default function Alerts() {
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{TYPE_LABEL[a.type] ?? a.type} · {ago(a.updated_at)}</div>
                 <div className="text-sm">{a.message}</div>
-                {a.product_id && <Link to={`/produtos/${a.product_id}`} className="text-xs text-indigo-600 hover:underline">Abrir produto {a.sku}</Link>}
+                {a.product_id && <Link to={`/produtos/${a.product_id}`} className="text-xs text-brand-600 hover:underline">Abrir produto {a.sku}</Link>}
               </div>
               {user?.role !== 'vendedor' && a.status !== 'resolved' && (
                 <div className="flex gap-1">

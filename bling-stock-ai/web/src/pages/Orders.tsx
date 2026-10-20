@@ -62,7 +62,7 @@ export default function Orders() {
                 <td className="td text-xs">{EFFECT[o.stock_effect]}</td>
                 <td className="td text-xs">
                   {o.items.map((i) => (
-                    <div key={i.itemId}>{i.productId ? <Link className="text-indigo-600 hover:underline" to={`/produtos/${i.productId}`}>{i.sku ?? i.name}</Link> : i.sku ?? i.name} × {num(i.quantity)}</div>
+                    <div key={i.itemId}>{i.productId ? <Link className="text-brand-600 hover:underline" to={`/produtos/${i.productId}`}>{i.sku ?? i.name}</Link> : i.sku ?? i.name} × {num(i.quantity)}</div>
                   ))}
                 </td>
                 {manager && <td className="td"><button className="btn-secondary px-2 py-1 text-xs" onClick={() => setFulfill(o)}>Ajustar</button></td>}

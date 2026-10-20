@@ -49,7 +49,7 @@ export default function Product() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-indigo-600"><ArrowLeft size={16} /> Assistente</Link>
+        <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"><ArrowLeft size={16} /> Assistente</Link>
         <button className="btn-secondary" onClick={() => load({ refresh: true })} disabled={loading}>
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar do Bling
         </button>
@@ -84,7 +84,7 @@ export default function Product() {
           <Table columns={['Componente', 'Qtd por kit', 'Disponível', 'Status']}>
             {data.kit.components.map((c) => (
               <tr key={c.componentId}>
-                <td className="td"><Link className="text-indigo-600 hover:underline" to={`/produtos/${c.componentId}`}>{c.sku} · {c.name}</Link></td>
+                <td className="td"><Link className="text-brand-600 hover:underline" to={`/produtos/${c.componentId}`}>{c.sku} · {c.name}</Link></td>
                 <td className="td tabular-nums">{num(c.quantityPerKit)}</td>
                 <td className="td tabular-nums">{num(c.availableForSale)}</td>
                 <td className="td">{c.status === 'CONFIRMED' ? 'Confirmada' : 'Não confirmada'}</td>
@@ -131,7 +131,7 @@ export default function Product() {
                 <td className="td tabular-nums">{num(l.quantity)}</td>
                 <td className="td font-semibold tabular-nums">{l.subtracted ? num(l.subtracted) : '—'}</td>
                 <td className="td text-xs">
-                  <span className={`rounded px-1.5 py-0.5 ${l.treatment === 'SUBTRACTED' ? 'bg-indigo-50 text-indigo-700' : l.treatment === 'ALREADY_IN_BASE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                  <span className={`rounded px-1.5 py-0.5 ${l.treatment === 'SUBTRACTED' ? 'bg-brand-50 text-brand-700' : l.treatment === 'ALREADY_IN_BASE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                     {TREATMENT_LABEL[l.treatment]}
                   </span>
                   {l.uncertain && <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">incerto</span>}

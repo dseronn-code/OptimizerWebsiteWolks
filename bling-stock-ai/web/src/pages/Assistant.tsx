@@ -81,14 +81,14 @@ export default function Assistant() {
       <div className="flex-1 space-y-4 py-4">
         {messages.length === 0 && (
           <div className="py-6 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600"><Sparkles /></div>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600"><Sparkles /></div>
             <h1 className="text-lg font-semibold text-slate-900">Pergunte sobre a disponibilidade de qualquer produto</h1>
             <p className="mx-auto mt-1 max-w-lg text-sm text-slate-500">
               Os números vêm do cálculo do sistema (saldo do Bling menos compromissos ainda não baixados). A IA só interpreta a pergunta e explica.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
-                <button key={s} onClick={() => ask(s)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-left text-sm text-slate-700 hover:border-indigo-300 hover:bg-indigo-50">
+                <button key={s} onClick={() => ask(s)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-left text-sm text-slate-700 hover:border-brand-300 hover:bg-brand-50">
                   {s}
                 </button>
               ))}
@@ -126,7 +126,7 @@ export default function Assistant() {
         {messages.length > 0 && (
           <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
             {SUGGESTIONS.slice(2, 8).map((s) => (
-              <button type="button" key={s} onClick={() => ask(s)} className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-indigo-50">
+              <button type="button" key={s} onClick={() => ask(s)} className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-brand-50">
                 {s}
               </button>
             ))}
@@ -144,7 +144,7 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
   if (m.role === 'user') {
     return (
       <div className="flex justify-end gap-2">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2 text-sm text-white">{m.content}</div>
+        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-brand-600 px-4 py-2 text-sm text-white">{m.content}</div>
         <UserIcon size={18} className="mt-2 shrink-0 text-slate-400" />
       </div>
     );
@@ -154,7 +154,7 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
   const uniqueAvail = [...new Map(availabilityCards.map((c) => [c.data.product.id, c])).values()];
   return (
     <div className="flex gap-2">
-      <Bot size={18} className={`mt-2 shrink-0 ${m.error ? 'text-rose-500' : 'text-indigo-500'}`} />
+      <Bot size={18} className={`mt-2 shrink-0 ${m.error ? 'text-rose-500' : 'text-brand-500'}`} />
       <div className="min-w-0 flex-1 space-y-3">
         <div className={`whitespace-pre-wrap rounded-2xl rounded-tl-sm px-4 py-3 text-sm ${m.error ? 'bg-rose-50 text-rose-800' : 'border border-slate-200 bg-white text-slate-800'}`}>
           {m.content}
@@ -167,8 +167,8 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
           c.type === 'candidates' ? (
             <div key={i} className="card divide-y divide-slate-100">
               {c.data.map((p) => (
-                <button key={p.id} onClick={() => onPick(p)} className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-indigo-50">
-                  <span><span className="font-semibold text-indigo-600">{p.sku ?? '—'}</span> · {p.name}</span>
+                <button key={p.id} onClick={() => onPick(p)} className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-brand-50">
+                  <span><span className="font-semibold text-brand-600">{p.sku ?? '—'}</span> · {p.name}</span>
                   <span className="text-xs text-slate-400">{Math.round(p.score * 100)}%</span>
                 </button>
               ))}
@@ -219,8 +219,8 @@ function ProductSearch() {
       {results.length > 0 && (
         <div className="card absolute z-20 mt-1 w-full divide-y divide-slate-100 overflow-hidden">
           {results.map((p) => (
-            <Link key={p.id} to={`/produtos/${p.id}`} onClick={() => setQ('')} className="block px-4 py-2 text-sm hover:bg-indigo-50">
-              <span className="font-semibold text-indigo-600">{p.sku ?? '—'}</span> · {p.name}
+            <Link key={p.id} to={`/produtos/${p.id}`} onClick={() => setQ('')} className="block px-4 py-2 text-sm hover:bg-brand-50">
+              <span className="font-semibold text-brand-600">{p.sku ?? '—'}</span> · {p.name}
               {!p.active && <span className="ml-2 text-xs text-slate-400">(inativo)</span>}
             </Link>
           ))}

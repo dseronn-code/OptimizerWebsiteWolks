@@ -27,7 +27,7 @@ const STATUS_STYLE: Record<string, string> = {
   PENDING: 'bg-sky-50 text-sky-700',
   ACTIVE: 'bg-emerald-50 text-emerald-700',
   EXPIRED: 'bg-amber-50 text-amber-800',
-  CONVERTED: 'bg-indigo-50 text-indigo-700',
+  CONVERTED: 'bg-brand-50 text-brand-700',
 };
 
 export default function Reservations() {
@@ -105,7 +105,7 @@ export default function Reservations() {
               const st = expired ? 'EXPIRED' : r.status;
               return (
                 <tr key={r.id}>
-                  <td className="td"><Link className="text-indigo-600 hover:underline" to={`/produtos/${r.product_id}`}>{r.sku ?? r.product_name}</Link><div className="text-xs text-slate-400">{r.deposit_name ?? 'qualquer depósito'}</div></td>
+                  <td className="td"><Link className="text-brand-600 hover:underline" to={`/produtos/${r.product_id}`}>{r.sku ?? r.product_name}</Link><div className="text-xs text-slate-400">{r.deposit_name ?? 'qualquer depósito'}</div></td>
                   <td className="td tabular-nums">{num(r.quantity)}</td>
                   <td className="td">{r.customer_name}<div className="text-xs text-slate-400">{r.reason}{r.bling_order_id ? ` · pedido ${r.bling_order_id}` : ''}</div></td>
                   <td className="td text-sm">{r.seller_name}</td>
@@ -134,7 +134,7 @@ export default function Reservations() {
             <h2 className="mb-3 font-semibold">Histórico da reserva</h2>
             <ul className="space-y-2 text-sm">
               {history.items.map((h) => (
-                <li key={h.id} className="border-l-2 border-indigo-200 pl-3">
+                <li key={h.id} className="border-l-2 border-brand-200 pl-3">
                   <div className="font-medium">{h.action} {h.from_status ? `${RESERVATION_STATUS[h.from_status] ?? h.from_status} → ` : ''}{RESERVATION_STATUS[h.to_status] ?? h.to_status ?? ''}</div>
                   <div className="text-xs text-slate-500">{dateTime(h.at)} · {h.user_name ?? 'sistema'}{h.details?.reason ? ` · ${h.details.reason}` : ''}</div>
                 </li>

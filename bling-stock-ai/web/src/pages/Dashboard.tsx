@@ -136,7 +136,7 @@ function ProductTable({ title, rows }: { title: string; rows: Row[] }) {
       <Table columns={['Produto', 'Físico', 'Saldo calculado', 'Disponível', 'Ocorrências']}>
         {rows.map((r) => (
           <tr key={r.id}>
-            <td className="td"><Link className="text-indigo-600 hover:underline" to={`/produtos/${r.id}`}>{r.sku}</Link> <span className="text-slate-500">{r.name}</span></td>
+            <td className="td"><Link className="text-brand-600 hover:underline" to={`/produtos/${r.id}`}>{r.sku}</Link> <span className="text-slate-500">{r.name}</span></td>
             <td className="td tabular-nums">{num(r.physical)}</td>
             <td className={`td tabular-nums ${r.available !== null && r.available < 0 ? 'font-semibold text-rose-600' : ''}`}>{num(r.available)}</td>
             <td className="td tabular-nums">{num(r.availableForSale)}</td>

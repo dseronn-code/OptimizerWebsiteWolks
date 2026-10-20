@@ -14,7 +14,7 @@ export default function AvailabilityCard({ data, sale, compact = false }: { data
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 p-4">
         <div className="min-w-0">
-          <div className="text-xs font-semibold text-indigo-600">{data.product.sku ?? 'sem SKU'}</div>
+          <div className="text-xs font-semibold text-brand-600">{data.product.sku ?? 'sem SKU'}</div>
           <div className="truncate font-medium text-slate-900">{data.product.name}</div>
           <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
             <Clock size={12} /> Dados de {dateTime(data.dataAsOf)} ({ago(data.dataAsOf)}){data.refreshed && ' · saldo atualizado agora'}
@@ -57,7 +57,7 @@ export default function AvailabilityCard({ data, sale, compact = false }: { data
       )}
 
       {compact && (
-        <Link to={`/produtos/${data.product.id}`} className="flex items-center justify-end gap-1 border-t border-slate-100 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50">
+        <Link to={`/produtos/${data.product.id}`} className="flex items-center justify-end gap-1 border-t border-slate-100 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50">
           Ver cálculo detalhado <ArrowRight size={14} />
         </Link>
       )}

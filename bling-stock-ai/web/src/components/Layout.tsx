@@ -1,3 +1,4 @@
+import { BRAND } from '../brand';
 import { AlertTriangle, BarChart3, Bell, Bookmark, ClipboardList, History, LogOut, MessageSquare, Menu, RefreshCw, Settings, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -47,7 +48,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           end={end}
           onClick={() => setOpen(false)}
           className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`
+            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100'}`
           }
         >
           <Icon size={18} /> {label}
@@ -104,7 +105,7 @@ function Brand() {
   return (
     <div className="flex items-center gap-2">
       <img src="/favicon.svg" alt="" className="h-7 w-7" />
-      <span className="font-semibold text-slate-900">Bling Stock AI</span>
+      <span className="font-semibold text-slate-900">{BRAND.appName}</span>
     </div>
   );
 }

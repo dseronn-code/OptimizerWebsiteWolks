@@ -1,3 +1,4 @@
+import { BRAND } from '../brand';
 import { useState } from 'react';
 import { useAuth } from '../auth';
 
@@ -22,13 +23,13 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-gradient-to-br from-indigo-50 to-slate-100 p-4">
+    <div className="flex min-h-full items-center justify-center bg-gradient-to-br from-brand-50 to-slate-100 p-4">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4 p-6">
         <div className="flex items-center gap-3">
           <img src="/favicon.svg" alt="" className="h-10 w-10" />
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Bling Stock AI</h1>
-            <p className="text-xs text-slate-500">Disponibilidade real de estoque para vendas</p>
+            <h1 className="text-lg font-semibold text-slate-900">{BRAND.appName}</h1>
+            <p className="text-xs text-slate-500">{BRAND.company} · {BRAND.tagline}</p>
           </div>
         </div>
         <div>
