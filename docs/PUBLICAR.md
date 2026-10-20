@@ -93,3 +93,22 @@ O Railway bloqueia envio de e-mail por SMTP fora do plano Pro, por isso o sistem
 Regras (em *Administração › Parâmetros*): cadastro ligado/desligado, aprovação obrigatória do administrador
 (padrão: ligada) e domínios de e-mail permitidos (ex.: `itcomtech.com.br`). Cadastros pendentes aparecem em
 *Administração › Usuários* e como alerta.
+
+### Alternativa sem telefone: enviar pelo próprio Gmail (Google Apps Script, gratuito)
+
+Limite: ~100 e-mails por dia (conta Gmail comum). Os e-mails saem do seu Gmail, o que ajuda a não cair no spam.
+
+1. Acesse **script.google.com** (no celular, use o Chrome em *Versão para computador*) → **Novo projeto**.
+2. Apague o conteúdo e cole o código de `docs/gmail-apps-script.gs`.
+3. Troque `TROQUE-POR-UMA-SENHA-LONGA` por uma senha longa só sua e salve (ícone de disquete).
+4. **Implantar › Nova implantação** → engrenagem → **App da Web** →
+   *Executar como*: **Eu** · *Quem pode acessar*: **Qualquer pessoa** → **Implantar**.
+5. Autorize (**Avançado › Acessar projeto (não seguro)** é normal para scripts próprios) e copie a **URL do app da Web** (termina em `/exec`).
+6. No Railway, em **Variables**:
+
+   | Variável | Valor |
+   |---|---|
+   | `EMAIL_PROVIDER` | `gmail_script` |
+   | `GMAIL_SCRIPT_URL` | a URL do passo 5 |
+   | `GMAIL_SCRIPT_SECRET` | a mesma senha do passo 3 |
+   | `EMAIL_FROM_NAME` | `ITCOMTECH Estoque` |

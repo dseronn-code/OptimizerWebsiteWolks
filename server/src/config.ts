@@ -38,7 +38,10 @@ const schema = z.object({
   BLING_REQUESTS_PER_SECOND: z.coerce.number().default(3),
 
   // E-mail (código de confirmação de cadastro). 'console' = só registra no log (desenvolvimento).
-  EMAIL_PROVIDER: z.enum(['console', 'brevo', 'resend']).default('console'),
+  EMAIL_PROVIDER: z.enum(['console', 'brevo', 'resend', 'gmail_script']).default('console'),
+  // gmail_script: envio pelo próprio Gmail via Google Apps Script (sem telefone, sem SMTP). Ver docs/PUBLICAR.md.
+  GMAIL_SCRIPT_URL: z.string().optional(),
+  GMAIL_SCRIPT_SECRET: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   EMAIL_FROM_NAME: z.string().default('ITCOMTECH Estoque'),
   BREVO_API_KEY: z.string().optional(),

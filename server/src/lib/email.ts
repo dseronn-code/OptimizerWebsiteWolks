@@ -1,7 +1,7 @@
 import { config, isProduction } from '../config.js';
 
 /**
- * Envio de e-mails transacionais por API HTTPS (Brevo ou Resend).
+ * Envio de e-mails transacionais por HTTPS: Brevo, Resend ou o próprio Gmail via Google Apps Script.
  * SMTP não é usado porque várias hospedagens (ex.: Railway fora do plano Pro) bloqueiam as portas SMTP.
  * Em desenvolvimento, sem provedor configurado, o e-mail é apenas registrado no log ("console").
  */
@@ -26,6 +26,7 @@ export function emailConfigured(): boolean {
   if (testTransport) return true;
   if (config.EMAIL_PROVIDER === 'brevo') return Boolean(config.BREVO_API_KEY && config.EMAIL_FROM);
   if (config.EMAIL_PROVIDER === 'resend') return Boolean(config.RESEND_API_KEY && config.EMAIL_FROM);
+  if (config.EMAIL_PROVIDER === 'gmail_script') return Boolean(config.GMAIL_SCRIPT_URL && config.GMAIL_SCRIPT_SECRET);
   // "console" só vale fora de produção (o código aparece no log do servidor)
   return !isProduction;
 }
@@ -54,6 +55,26 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
       body: JSON.stringify({ from: `${fromName} <${config.EMAIL_FROM}>`, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
       signal: AbortSignal.timeout(15000),
     });
+  } else if (config.EMAIL_PROVIDER === 'gmail_script') {
+    // O Apps Script responde com redirecionamento; o fetch segue e lê o resultado final.
+    res = await fetch(config.GMAIL_SCRIPT_URL!, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ secret: config.GMAIL_SCRIPT_SECRET, to: msg.to, subject: msg.subject, text: msg.text, html: msg.html, name: fromName }),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(20000),
+    });
+    const body = await res.text().catch(() => '');
+    let parsed: { ok?: boolean; error?: string } = {};
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      /* resposta não-JSON: tratada abaixo */
+    }
+    if (!res.ok || !parsed.ok) {
+      throw new Error(`Falha ao enviar e-mail pelo Gmail (HTTP ${res.status}): ${parsed.error ?? body.slice(0, 200)}`);
+    }
+    return;
   } else {
     if (isProduction) throw new Error('Envio de e-mail não configurado (EMAIL_PROVIDER).');
     console.log(`\n[e-mail de desenvolvimento] para ${msg.to}\nAssunto: ${msg.subject}\n${msg.text}\n`);
