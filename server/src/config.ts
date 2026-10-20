@@ -56,6 +56,14 @@ const schema = z.object({
 });
 
 export const config = schema.parse(process.env);
+
+if (config.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+  console.error(
+    '\n[CONFIGURAÇÃO] A variável DATABASE_URL não foi definida. Crie um banco PostgreSQL e defina ' +
+      'DATABASE_URL (no Railway: DATABASE_URL=${{Postgres.DATABASE_URL}} na aba Variables do serviço do app).\n',
+  );
+  process.exit(1);
+}
 export type Config = typeof config;
 
 export const isProduction = config.NODE_ENV === 'production';
