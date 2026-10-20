@@ -1,4 +1,38 @@
-# Publicar gratuitamente (dá para fazer pelo celular)
+# Publicar o sistema (dá para fazer pelo celular)
+
+## Opção A — Railway (recomendado: não "dorme" e o banco fica junto)
+
+Custo: teste grátis com crédito inicial; depois, plano Hobby (~US$ 5/mês, que já inclui US$ 5 de uso —
+um sistema deste porte costuma caber nesse valor). Confira em railway.com/pricing.
+
+1. Acesse **railway.com** → *Login* com a conta **GitHub**.
+2. **New Project** → **Deploy from GitHub repo** → escolha `optimizerwebsitewolks`.
+3. Abra o serviço criado → **Settings**:
+   - **Source › Branch**: `claude/great-gates-t0hp3w` (ou `main`, depois de juntar o código);
+   - **Source › Root Directory**: `bling-stock-ai`;
+   - **Networking › Generate Domain** (cria o endereço público).
+4. No projeto: **+ Create** (ou *New*) → **Database** → **PostgreSQL**.
+5. No serviço do app → **Variables** → adicione:
+
+   | Variável | Valor |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (o Railway sugere ao digitar) |
+   | `NODE_ENV` | `production` |
+   | `TOKEN_ENCRYPTION_KEY` | uma frase secreta qualquer com **32 ou mais caracteres** (guarde-a) |
+   | `BOOTSTRAP_ADMIN_USERNAME` | `admin` |
+   | `BOOTSTRAP_ADMIN_PASSWORD` | sua senha (mín. 10 caracteres, letras e números) |
+   | `SEED_DEMO_IF_EMPTY` | `true` (dados fictícios para conhecer o app; depois mude para `false`) |
+   | `AI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` (opcional) |
+   | `AI_MODEL` | `gemini-flash-latest` (opcional) |
+   | `AI_API_KEY` | chave do Google Gemini (opcional) |
+
+6. **Deploy**. Quando ficar verde, abra o endereço gerado e entre com `admin` + sua senha.
+
+O arquivo `bling-stock-ai/railway.json` já define build, início e verificação de saúde.
+
+---
+
+## Opção B — Render + Neon (gratuito)
 
 Hospedagem: **Render** (servidor, plano gratuito) + **Neon** (banco PostgreSQL, plano gratuito).
 

@@ -7,12 +7,18 @@ const schema = z.object({
   DATABASE_URL: z.string().default('postgres://postgres@localhost:5432/blingstock'),
   // Origem pública do frontend (usada em CORS/redirects). Ex.: https://estoque.suaempresa.com.br
   // No Render, RENDER_EXTERNAL_URL é preenchida automaticamente com o endereço público.
-  APP_ORIGIN: z.string().default(process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:5173'),
+  // No Render/Railway, o endereço público é detectado automaticamente.
+  APP_ORIGIN: z
+    .string()
+    .default(
+      process.env.RENDER_EXTERNAL_URL ??
+        (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : 'http://localhost:5173'),
+    ),
   // Primeira inicialização com banco vazio: carrega a demonstração e/ou cria o administrador.
   SEED_DEMO_IF_EMPTY: z.string().default('false').transform((v) => v === 'true'),
   BOOTSTRAP_ADMIN_USERNAME: z.string().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().optional(),
-  // 32 bytes em base64 — chave AES-256-GCM para cifrar tokens do Bling no banco.
+  // Chave AES-256-GCM para cifrar tokens do Bling: 32 bytes em base64 OU uma frase secreta com 32+ caracteres.
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
   // Fuso usado nas respostas em texto do assistente.
   APP_TIMEZONE: z.string().default('America/Sao_Paulo'),

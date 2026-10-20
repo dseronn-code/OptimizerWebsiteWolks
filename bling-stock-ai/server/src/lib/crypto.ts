@@ -6,9 +6,12 @@ let cachedKey: Buffer | null = null;
 function key(): Buffer {
   if (cachedKey) return cachedKey;
   if (config.TOKEN_ENCRYPTION_KEY) {
-    const k = Buffer.from(config.TOKEN_ENCRYPTION_KEY, 'base64');
-    if (k.length !== 32) throw new Error('TOKEN_ENCRYPTION_KEY deve ter 32 bytes em base64');
-    cachedKey = k;
+    const raw = config.TOKEN_ENCRYPTION_KEY.trim();
+    const k = Buffer.from(raw, 'base64');
+    if (k.length === 32 && /^[A-Za-z0-9+/]+={0,2}$/.test(raw)) cachedKey = k;
+    // Frase secreta longa (mais fácil de digitar em painéis de hospedagem): deriva 32 bytes.
+    else if (raw.length >= 32) cachedKey = createHash('sha256').update(`bling-stock-ai:${raw}`).digest();
+    else throw new Error('TOKEN_ENCRYPTION_KEY deve ter 32 bytes em base64 ou ser uma frase com pelo menos 32 caracteres');
   } else {
     if (isProduction) throw new Error('TOKEN_ENCRYPTION_KEY é obrigatório em produção');
     // Desenvolvimento/demonstração: chave derivada fixa. Nunca usar com dados reais.
