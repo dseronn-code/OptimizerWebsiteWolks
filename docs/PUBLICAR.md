@@ -9,7 +9,7 @@ um sistema deste porte costuma caber nesse valor). Confira em railway.com/pricin
 2. **New Project** → **Deploy from GitHub repo** → escolha `optimizerwebsitewolks`.
 3. Abra o serviço criado → **Settings**:
    - **Source › Branch**: `claude/great-gates-t0hp3w` (ou `main`, depois de juntar o código);
-   - **Source › Root Directory**: `bling-stock-ai`;
+   - **Source › Root Directory**: deixe vazio (o sistema está na raiz do repositório);
    - **Networking › Generate Domain** (cria o endereço público).
 4. No projeto: **+ Create** (ou *New*) → **Database** → **PostgreSQL**.
 5. No serviço do app → **Variables** → adicione:
@@ -28,7 +28,7 @@ um sistema deste porte costuma caber nesse valor). Confira em railway.com/pricin
 
 6. **Deploy**. Quando ficar verde, abra o endereço gerado e entre com `admin` + sua senha.
 
-O arquivo `bling-stock-ai/railway.json` já define build, início e verificação de saúde.
+O arquivo `railway.json` já define build, início e verificação de saúde.
 
 ---
 

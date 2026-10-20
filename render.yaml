@@ -5,7 +5,6 @@ services:
     name: itcomtech-estoque
     runtime: node
     plan: free
-    rootDir: bling-stock-ai
     buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/health
