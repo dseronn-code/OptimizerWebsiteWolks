@@ -11,6 +11,8 @@ interface Message {
   content: string;
   cards?: Card[];
   engine?: 'llm' | 'local';
+  model?: string;
+  fallbackReason?: string;
   error?: boolean;
 }
 
@@ -65,7 +67,7 @@ export default function Assistant() {
     try {
       const r = await api.post<ChatAnswer>('/api/chat', { question: q, history, lastProductId });
       setLastProductId(r.lastProductId);
-      setMessages((m) => [...m, { role: 'assistant', content: r.answer, cards: r.cards, engine: r.engine }]);
+      setMessages((m) => [...m, { role: 'assistant', content: r.answer, cards: r.cards, engine: r.engine, model: r.model, fallbackReason: r.fallbackReason }]);
     } catch (err) {
       setMessages((m) => [...m, { role: 'assistant', content: `Não foi possível consultar: ${(err as Error).message}`, error: true }]);
     } finally {
@@ -158,7 +160,7 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
       <div className="min-w-0 flex-1 space-y-3">
         <div className={`whitespace-pre-wrap rounded-2xl rounded-tl-sm px-4 py-3 text-sm ${m.error ? 'bg-rose-50 text-rose-800' : 'border border-slate-200 bg-white text-slate-800'}`}>
           {m.content}
-          {m.engine === 'local' && <div className="mt-2 text-[11px] text-slate-400">Resposta gerada pelo interpretador local</div>}
+          {m.engine && <EngineBadge engine={m.engine} model={m.model} fallbackReason={m.fallbackReason} />}
         </div>
         {uniqueAvail.map((c) => (
           <AvailabilityCard key={c.data.product.id} data={c.data} sale={c.sale} compact />
@@ -226,6 +228,22 @@ function ProductSearch() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Mostra quem respondeu: a IA (modelo de linguagem) ou o sistema (interpretador local por regras). */
+function EngineBadge({ engine, model, fallbackReason }: { engine: 'llm' | 'local'; model?: string; fallbackReason?: string }) {
+  if (engine === 'llm') {
+    return (
+      <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+        <Sparkles size={12} /> Resposta da IA{model ? ` · ${model}` : ''}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+      <Bot size={12} /> Resposta do sistema (sem IA){fallbackReason ? ` — ${fallbackReason}` : ''}
     </div>
   );
 }

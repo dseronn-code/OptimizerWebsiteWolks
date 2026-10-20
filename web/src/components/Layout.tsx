@@ -116,7 +116,10 @@ function Footer({ user, status, ordersAt, onLogout }: { user: ReturnType<typeof 
       <div className="flex items-center gap-2">
         <RefreshCw size={14} /> Pedidos sincronizados {ago(ordersAt)}
       </div>
-      <div>IA: {status?.aiEngine === 'llm' ? 'modelo de linguagem' : 'interpretador local'}</div>
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 rounded-full ${status?.aiEngine === 'llm' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+        {status?.aiEngine === 'llm' ? 'IA ligada' : 'IA desligada (respostas do sistema)'}
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium text-slate-700">{user?.name}</div>

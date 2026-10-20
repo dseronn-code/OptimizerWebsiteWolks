@@ -106,5 +106,7 @@ export interface ChatAnswer {
   answer: string;
   cards: Card[];
   engine: 'llm' | 'local';
+  model?: string;
+  fallbackReason?: string;
   lastProductId: number | null;
 }

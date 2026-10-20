@@ -24,6 +24,10 @@ export interface ChatAnswer {
   cards: Card[];
   toolCalls: { name: string; input: unknown }[];
   engine: 'llm' | 'local';
+  /** Modelo de IA que respondeu (quando engine = 'llm'). */
+  model?: string;
+  /** Preenchido quando a IA estava configurada mas falhou e o interpretador local respondeu. */
+  fallbackReason?: string;
   lastProductId: number | null;
 }
 
@@ -67,7 +71,7 @@ export async function answerQuestion(
     const local = await interpretLocally(question, ctx);
     return { ...local, cards: ctx.cards, engine: 'local', lastProductId: ctx.lastProductId };
   }
-  if (provider === 'openai_compat') return answerWithOpenAiCompatible(question, history, ctx);
+  if (provider === 'openai_compat') return { ...(await answerWithOpenAiCompatible(question, history, ctx)), model: config.AI_MODEL };
 
   const tools = buildTools();
   const toolCalls: { name: string; input: unknown }[] = [];
@@ -90,7 +94,7 @@ export async function answerQuestion(
     });
 
     if (response.stop_reason === 'refusal') {
-      return { answer: 'Não consigo responder a essa solicitação. Reformule a pergunta sobre estoque, pedidos ou reservas.', cards: ctx.cards, toolCalls, engine: 'llm', lastProductId: ctx.lastProductId };
+      return { answer: 'Não consigo responder a essa solicitação. Reformule a pergunta sobre estoque, pedidos ou reservas.', cards: ctx.cards, toolCalls, engine: 'llm', model: config.AI_MODEL ?? 'claude-opus-5-5', lastProductId: ctx.lastProductId };
     }
     const text = response.content
       .filter((b): b is Anthropic.Beta.Messages.BetaTextBlock => b.type === 'text')
@@ -102,7 +106,7 @@ export async function answerQuestion(
         messages.push({ role: 'assistant', content: response.content });
         continue;
       }
-      return { answer: text || 'Não obtive uma resposta.', cards: ctx.cards, toolCalls, engine: 'llm', lastProductId: ctx.lastProductId };
+      return { answer: text || 'Não obtive uma resposta.', cards: ctx.cards, toolCalls, engine: 'llm', model: config.AI_MODEL ?? 'claude-opus-5-5', lastProductId: ctx.lastProductId };
     }
 
     messages.push({ role: 'assistant', content: response.content });

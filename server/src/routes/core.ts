@@ -118,7 +118,8 @@ export async function coreRoutes(app: FastifyInstance) {
       const { interpretLocally } = await import('../ai/localInterpreter.js');
       const ctx = { viewer: viewerOf(user), cards: [], lastProductId: body.lastProductId };
       const local = await interpretLocally(body.question, ctx);
-      result = { ...local, cards: ctx.cards, engine: 'local' as const, lastProductId: ctx.lastProductId };
+      const reason = /timeout|aborted/i.test((err as Error).message) ? 'a IA demorou demais para responder' : /429/.test((err as Error).message) ? 'limite de uso da IA atingido' : 'a IA está indisponível no momento';
+      result = { ...local, cards: ctx.cards, engine: 'local' as const, lastProductId: ctx.lastProductId, fallbackReason: reason };
     }
     await pool.query('INSERT INTO query_history (user_id, question, answer, tools, engine) VALUES ($1, $2, $3, $4, $5)', [
       user.id, body.question, result.answer, JSON.stringify(result.toolCalls), result.engine,
