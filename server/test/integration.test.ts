@@ -291,6 +291,22 @@ describe('API: autenticação, perfis e webhooks', () => {
   });
 });
 
+describe('interpretador local: perguntas gerais', () => {
+  it('lista produtos disponíveis e ignora palavras comuns como "são nossos" e "estão"', async () => {
+    for (const q of ['Quais são nossos produtos disponíveis para venda?', 'Quais produtos estão disponíveis para venda?', 'o que temos em estoque?']) {
+      const r = await answerQuestion(q, [], seller1, null);
+      expect(r.answer).toContain('Produtos disponíveis para venda');
+      expect(r.answer).toContain('TST-1');
+      expect(r.toolCalls[0].name).toBe('listar_produtos');
+    }
+  });
+
+  it('produto inexistente gera orientação em vez de erro', async () => {
+    const r = await answerQuestion('quanto temos do parafuso xyz?', [], seller1, null);
+    expect(r.answer).toMatch(/Não encontrei um produto/);
+  });
+});
+
 describe('IA via provedor compatível com OpenAI (Groq, Gemini…)', () => {
   it('executa a ferramenta pedida pelo modelo e usa os números do motor', async () => {
     const requests: any[] = [];
@@ -325,7 +341,7 @@ describe('IA via provedor compatível com OpenAI (Groq, Gemini…)', () => {
       expect(r.cards[0].type).toBe('availability');
       expect(requests[0].url).toBe('/v1/chat/completions');
       expect(requests[0].auth).toBe('Bearer chave-gratis-teste');
-      expect(requests[0].body.tools).toHaveLength(11);
+      expect(requests[0].body.tools).toHaveLength(12);
     } finally {
       Object.assign(config, saved);
       server.close();

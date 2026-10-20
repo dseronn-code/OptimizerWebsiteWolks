@@ -13,7 +13,8 @@ const STOPWORDS = new Set(
    tem temos ha tenho existe existem consigo conseguimos posso podemos pode vender venda vendo atender agora hoje ainda disponivel disponiveis
    livre livres estoque saldo produto produtos item itens sku codigo unidade unidades un und pecas peca pcs pc caixa caixas kg metros
    me diga mostre mostra ver veja sobre isso esse este desse deste dessa desta voce voces nos eu sim nao favor por favor oi ola
-   quero preciso gostaria saber`.split(/\s+/),
+   quero preciso gostaria saber sao estao esta e nossos nossas nosso nossa todos todas tudo lista listar algum alguma alguns algumas
+   ai la aqui quantidade tem quanto qtd qtde favor ver pode podem gente empresa loja temos possuimos possui`.split(/\s+/),
 );
 
 function extractQuantity(q: string): number | null {
@@ -141,6 +142,26 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
       toolCalls: calls,
     };
   }
+  // --- listagem de produtos (sem um produto específico)
+  const listIntent =
+    /(quais|que|lista|listar|liste|mostra|mostre|todos os|todas as|relacao|relatorio)\b.*\b(produtos|itens|mercadorias)\b/.test(q) ||
+    /\b(produtos|itens)\b.*\b(disponiveis|em estoque|para venda|pra venda|sem estoque|zerados?|em falta|esgotados?)\b/.test(q) ||
+    /\b(o que|oque)\b.*\b(temos|tem|ha)\b.*\b(disponivel|disponiveis|estoque|para vender|pra vender)\b/.test(q) ||
+    /\b(sem estoque|em falta|esgotad|zerad)/.test(q);
+  if (listIntent && !extractQuantity(q)) {
+    const filtro = /(sem estoque|em falta|esgotad|zerad|acabou|acabaram)/.test(q) ? 'sem_estoque' : /(nao confirmad|duvid|incert)/.test(q) ? 'nao_confirmados' : /\btodos\b|\btodas\b|catalogo/.test(q) && !/disponi/.test(q) ? 'todos' : 'disponiveis';
+    const busca = productTerm(question, ['quais', 'produtos', 'itens', 'mercadorias', 'lista', 'listar', 'liste', 'mostra', 'mostre', 'relacao', 'relatorio', 'falta', 'esgotado', 'esgotados', 'zerado', 'zerados', 'acabou', 'acabaram', 'catalogo', 'confirmados', 'confirmado', 'oque', 'vender']);
+    let r = await run('listar_produtos', { filtro, busca: busca || undefined });
+    if (busca && r.total_encontrado === 0) r = await run('listar_produtos', { filtro });
+    const titulo = filtro === 'sem_estoque' ? 'Produtos sem saldo para venda' : filtro === 'nao_confirmados' ? 'Produtos com disponibilidade não confirmada' : filtro === 'todos' ? 'Produtos' : 'Produtos disponíveis para venda';
+    if (!r.produtos.length) return { answer: `${titulo}: nenhum encontrado.`, toolCalls: calls };
+    const linhas = r.produtos.map((p: any) => `• ${p.sku ? `${p.sku} — ` : ''}${p.nome}: ${fmt(p.disponivel_para_venda)}${p.unidade ? ` ${p.unidade}` : ''}${p.status === 'CONFIRMADA' ? '' : ' (não confirmada)'}`);
+    return {
+      answer: `${titulo} (${r.total_encontrado}${r.exibidos < r.total_encontrado ? `, mostrando ${r.exibidos}` : ''}):\n${linhas.join('\n')}\n\nPara ver o cálculo de um item, pergunte por ele (ex.: "quanto temos do ${r.produtos[0].sku ?? r.produtos[0].nome}?").`,
+      toolCalls: calls,
+    };
+  }
+
   // --- cliente
   const cliente = question.match(/cliente\s+([A-Za-zÀ-ÿ][\wÀ-ÿ .'-]{1,60}?)(?:\s+tem\b|\s+possui\b|\?|$)/i);
   if (cliente && !/produto/.test(q)) {
@@ -189,6 +210,12 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
     };
   }
   const r = await run('consultar_disponibilidade', { produto: term });
+  if (r?.erro && /Nenhum produto/.test(r.erro)) {
+    return {
+      answer: `Não encontrei um produto com "${term}". Você pode:\n• informar o SKU ou parte do nome (ex.: "quanto temos do ABC?")\n• pedir a lista: "quais produtos estão disponíveis?"\n• usar a busca no topo da tela.`,
+      toolCalls: calls,
+    };
+  }
   const amb = ambiguousText(r);
   if (amb) return { answer: amb, toolCalls: calls };
   return { answer: availabilityText(r), toolCalls: calls };

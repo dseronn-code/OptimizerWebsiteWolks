@@ -62,7 +62,7 @@ async function complete(messages: Message[], tools: ReturnType<typeof buildTools
       method: 'POST',
       headers: { Authorization: `Bearer ${config.AI_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: config.AI_MODEL, messages, tools, tool_choice: 'auto', temperature: 0.1 }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(config.AI_TIMEOUT_MS),
     });
     // Planos gratuitos têm limite por minuto: uma nova tentativa curta antes de desistir.
     if ((res.status === 429 || res.status >= 500) && attempt < 2) {

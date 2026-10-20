@@ -23,7 +23,7 @@ um sistema deste porte costuma caber nesse valor). Confira em railway.com/pricin
    | `BOOTSTRAP_ADMIN_PASSWORD` | sua senha (mín. 10 caracteres, letras e números) |
    | `SEED_DEMO_IF_EMPTY` | `true` (dados fictícios para conhecer o app; depois mude para `false`) |
    | `AI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` (opcional) |
-   | `AI_MODEL` | `gemini-flash-latest` (opcional) |
+   | `AI_MODEL` | `gemini-flash-lite-latest` (opcional) |
    | `AI_API_KEY` | chave do Google Gemini (opcional) |
 
 6. **Deploy**. Quando ficar verde, abra o endereço gerado e entre com `admin` + sua senha.

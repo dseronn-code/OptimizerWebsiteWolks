@@ -43,6 +43,11 @@ export const toolSchemas = {
   reservas_vencendo: z.object({ horas: z.number().positive().max(24 * 30).optional() }),
   entradas_previstas: z.object({ produto: productRef.optional(), ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Data limite AAAA-MM-DD') }),
   simular_cancelamento: z.object({ pedido: z.number().int().positive().describe('Número do pedido no Bling'), produto: productRef.optional() }),
+  listar_produtos: z.object({
+    filtro: z.enum(['disponiveis', 'sem_estoque', 'nao_confirmados', 'todos']).optional().describe('disponiveis (padrão): com saldo para venda; sem_estoque: zerados; nao_confirmados: com aviso; todos'),
+    busca: z.string().max(80).optional().describe('Parte do nome/SKU ou categoria para filtrar (opcional)'),
+    limite: z.number().int().positive().max(100).optional(),
+  }),
   status_sincronizacao: z.object({}),
 } as const;
 
@@ -60,6 +65,7 @@ export const toolDescriptions: Record<ToolName, string> = {
   reservas_vencendo: 'Lista reservas que vencem nas próximas horas e reservas já vencidas.',
   entradas_previstas: 'Lista entradas previstas (pedidos de compra em aberto), opcionalmente de um produto e até uma data. Entradas não aumentam a disponibilidade atual.',
   simular_cancelamento: 'Simula quanto ficaria disponível se um pedido fosse cancelado (não altera nada).',
+  listar_produtos: 'Lista vários produtos com o disponível para venda de cada um (ex.: "quais produtos temos disponíveis?", "o que está sem estoque?"). Ordena do maior para o menor disponível.',
   status_sincronizacao: 'Informa a última sincronização com o Bling e falhas recentes.',
 };
 
@@ -333,6 +339,43 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       }
       if (out.length) ctx.cards.push({ type: 'table', title: `Simulação: cancelamento do pedido ${input.pedido}`, columns: ['Produto', 'Hoje', 'Se cancelar', 'Diferença'], rows: out.map((o) => [o.produto, o.disponivel_hoje, o.disponivel_se_cancelar, o.diferenca]) });
       return { simulacao: true, observacao: 'Simulação apenas — nada foi alterado.', resultados: out };
+    }
+    case 'listar_produtos': {
+      const filtro = input.filtro ?? 'disponiveis';
+      const limite = input.limite ?? 30;
+      const busca = input.busca ? `%${input.busca}%` : null;
+      const { rows } = await pool.query<{ id: number }>(
+        `SELECT p.id FROM products p
+         WHERE p.active AND p.format <> 'V'
+           AND (EXISTS (SELECT 1 FROM stock_balances b WHERE b.product_id = p.id) OR p.format = 'E')
+           AND ($1::text IS NULL OR p.name ILIKE $1 OR p.sku ILIKE $1)
+         ORDER BY p.name LIMIT 500`,
+        [busca],
+      );
+      const items: { id: number; sku: string | null; nome: string; disponivel: number; fisico: number | null; status: string; unidade: string | null }[] = [];
+      for (const { id } of rows) {
+        const r = await getAvailability(id, { viewer: ctx.viewer });
+        if (!r) continue;
+        items.push({ id, sku: r.product.sku, nome: r.product.name, disponivel: r.availableForSale, fisico: r.physicalTotal, status: r.status, unidade: r.product.unit ?? null });
+      }
+      const filtered = items
+        .filter((i) => (filtro === 'disponiveis' ? i.disponivel > 0 : filtro === 'sem_estoque' ? i.disponivel <= 0 : filtro === 'nao_confirmados' ? i.status !== 'CONFIRMED' : true))
+        .sort((a, b) => b.disponivel - a.disponivel || a.nome.localeCompare(b.nome));
+      const shown = filtered.slice(0, limite);
+      if (shown.length) {
+        ctx.cards.push({
+          type: 'table',
+          title: filtro === 'sem_estoque' ? 'Produtos sem saldo para venda' : filtro === 'nao_confirmados' ? 'Produtos com disponibilidade não confirmada' : 'Produtos disponíveis para venda',
+          columns: ['SKU', 'Produto', 'Disponível', 'Físico', 'Status'],
+          rows: shown.map((i) => [i.sku, i.nome, i.disponivel, i.fisico, i.status === 'CONFIRMED' ? 'Confirmada' : 'Não confirmada']),
+        });
+      }
+      return {
+        filtro,
+        total_encontrado: filtered.length,
+        exibidos: shown.length,
+        produtos: shown.map((i) => ({ sku: i.sku, nome: i.nome, disponivel_para_venda: i.disponivel, fisico: i.fisico, unidade: i.unidade, status: i.status === 'CONFIRMED' ? 'CONFIRMADA' : 'NÃO CONFIRMADA' })),
+      };
     }
     case 'status_sincronizacao': {
       const { rows } = await pool.query('SELECT resource, last_success_at, last_attempt_at, last_error, last_error_at FROM sync_state ORDER BY resource');

@@ -46,6 +46,8 @@ const schema = z.object({
   AI_BASE_URL: z.string().optional(),
   AI_API_KEY: z.string().optional(),
   AI_MODEL: z.string().optional(),
+  // Tempo máximo por chamada à IA; acima disso o chat responde pelo interpretador local.
+  AI_TIMEOUT_MS: z.coerce.number().default(25000),
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
 
   // Executa jobs/agendamentos dentro do processo web (simplifica implantação pequena).
