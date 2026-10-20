@@ -11,6 +11,8 @@ export default defineConfig({
       NODE_ENV: 'test',
       BLING_CLIENT_SECRET: 'segredo-de-teste',
       ANTHROPIC_API_KEY: '',
+      // Testes nunca chamam IA externa (o .env local pode ter chaves).
+      AI_PROVIDER: 'local',
     },
   },
 });

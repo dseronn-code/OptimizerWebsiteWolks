@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { config } from '../config.js';
 import { pool } from '../db/pool.js';
 import { checkSale } from '../engine/availability.js';
 import type { ExplanationLine } from '../engine/types.js';
@@ -82,6 +83,11 @@ export async function resolveProduct(ref: string, ctx: ToolContext): Promise<Res
   return { ambiguous: matches };
 }
 
+function localTime(iso: string | Date | null | undefined): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString('pt-BR', { timeZone: config.APP_TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
+}
+
 function fmtLine(l: ExplanationLine) {
   return {
     tipo: l.kind === 'ORDER' ? 'pedido' : l.kind === 'RESERVATION' ? 'reserva' : 'bloqueio',
@@ -93,7 +99,7 @@ function fmtLine(l: ExplanationLine) {
     tratamento: l.treatment,
     motivo: l.reason,
     deposito_presumido: l.depositAssumed,
-    vence_em: l.expiresAt,
+    vence_em_local: localTime(l.expiresAt),
   };
 }
 
@@ -119,7 +125,7 @@ function summarize(r: AvailabilityResponse) {
     por_deposito: r.byDeposit.map((d) => ({ deposito: d.depositName, ignorado: d.ignored, fisico: d.physical, disponivel: d.availableForSale })),
     oportunidades_sem_reserva: r.opportunitiesTotal,
     entradas_previstas: r.incoming.map((e) => ({ pedido_compra: e.purchaseOrderNumber, quantidade: e.quantity, previsao: e.expectedDate })),
-    dados_de: r.dataAsOf,
+    dados_de_local: localTime(r.dataAsOf),
     saldo_atualizado_agora: r.refreshed,
     erro_atualizacao: r.refreshError,
     kit: r.kit ? { disponivel_kits: r.kit.availableForSale, status: r.kit.status, componentes: r.kit.components } : null,
@@ -218,7 +224,7 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       ];
       if (rows.length) ctx.cards.push({ type: 'table', title: `Compromissos do cliente "${input.cliente}"`, columns: ['Origem', 'Cliente', 'Produto', 'Qtd', 'Situação', 'Vendedor'], rows });
       return {
-        reservas: visibleRes.map((r) => ({ produto: `${r.sku ?? ''} ${r.name}`, quantidade: r.quantity, status: r.status, vence_em: r.expires_at, cliente: r.customer_name, vendedor: r.seller, motivo: r.reason })),
+        reservas: visibleRes.map((r) => ({ produto: `${r.sku ?? ''} ${r.name}`, quantidade: r.quantity, status: r.status, vence_em: r.expires_at, vence_em_local: localTime(r.expires_at), cliente: r.customer_name, vendedor: r.seller, motivo: r.reason })),
         pedidos: visibleOrd.map((o) => ({ pedido: o.number ?? o.id, cliente: o.customer_name, produto: `${o.sku ?? ''} ${o.name ?? ''}`, quantidade: o.quantity, situacao: o.situacao, categoria: o.category })),
         ocultos_por_permissao: hidden,
       };
@@ -275,9 +281,10 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
         cliente: canSeeCustomer({ sellerId: null, sellerUserId: r.seller_user_id }, ctx.viewer, settings) ? r.customer_name : 'Cliente de outro vendedor',
         vendedor: r.seller,
         vence_em: r.expires_at,
+        vence_em_local: localTime(r.expires_at),
         vencida: r.status === 'EXPIRED' || r.expires_at <= new Date(),
       }));
-      if (out.length) ctx.cards.push({ type: 'table', title: `Reservas vencendo (${hours} h) e vencidas`, columns: ['Produto', 'Qtd', 'Cliente', 'Vendedor', 'Vence em'], rows: out.map((o) => [o.produto, o.quantidade, o.cliente, o.vendedor, new Date(o.vence_em).toLocaleString('pt-BR')]) });
+      if (out.length) ctx.cards.push({ type: 'table', title: `Reservas vencendo (${hours} h) e vencidas`, columns: ['Produto', 'Qtd', 'Cliente', 'Vendedor', 'Vence em'], rows: out.map((o) => [o.produto, o.quantidade, o.cliente, o.vendedor, o.vence_em_local]) });
       return { horas: hours, reservas: out };
     }
     case 'entradas_previstas': {

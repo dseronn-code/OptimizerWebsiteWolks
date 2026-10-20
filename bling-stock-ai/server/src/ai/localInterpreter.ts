@@ -60,7 +60,7 @@ function availabilityText(r: any, saleMsg?: string): string {
     for (const a of r.avisos.slice(0, 3)) lines.push(`• ${a}`);
   }
   if (r.entradas_previstas?.length) lines.push(`Entradas previstas (não contam no disponível): ${r.entradas_previstas.map((e: any) => `${fmt(e.quantidade)} em ${e.previsao ?? 'data não informada'}`).join('; ')}`);
-  lines.push(`Dados de: ${fmtDate(r.dados_de)}${r.saldo_atualizado_agora ? ' (saldo atualizado agora no Bling)' : ''} · Status: ${r.status.toLowerCase()}`);
+  lines.push(`Dados de: ${(r.dados_de_local ?? 'sem dados')}${r.saldo_atualizado_agora ? ' (saldo atualizado agora no Bling)' : ''} · Status: ${r.status.toLowerCase()}`);
   return lines.join('\n');
 }
 
