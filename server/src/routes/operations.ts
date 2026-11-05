@@ -330,7 +330,18 @@ export async function operationsRoutes(app: FastifyInstance) {
        FROM sales_orders o JOIN sales_order_items i ON i.order_id = o.id LEFT JOIN situations s ON s.id = o.situation_id
        LEFT JOIN situation_rules r1 ON r1.situation_id = o.situation_id LEFT JOIN situation_rules r2 ON r2.situation_id = s.inherited_id
        WHERE NOT o.deleted AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'UNMAPPED')
-       GROUP BY o.id, s.name ORDER BY o.order_date NULLS FIRST, o.id LIMIT 20`,
+         AND (o.order_date IS NULL OR o.order_date < current_date - $1::int)
+       GROUP BY o.id, s.name ORDER BY o.order_date NULLS FIRST, o.id LIMIT 50`,
+      [settings.alerts.committedWithoutPostingDays],
+    );
+    // pedidos recentes (dentro do prazo normal) só entram como total
+    const recentCommitted = await pool.query<{ orders: number; units: number }>(
+      `SELECT COUNT(DISTINCT o.id)::int AS orders, COALESCE(SUM(i.quantity), 0) AS units
+       FROM sales_orders o JOIN sales_order_items i ON i.order_id = o.id LEFT JOIN situations s ON s.id = o.situation_id
+       LEFT JOIN situation_rules r1 ON r1.situation_id = o.situation_id LEFT JOIN situation_rules r2 ON r2.situation_id = s.inherited_id
+       WHERE NOT o.deleted AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'UNMAPPED')
+         AND o.order_date >= current_date - $1::int`,
+      [settings.alerts.committedWithoutPostingDays],
     );
     const syncFailures = await pool.query(
       "SELECT kind, started_at, error FROM sync_runs WHERE status = 'error' AND started_at > now() - interval '7 days' ORDER BY started_at DESC LIMIT 20",
@@ -349,6 +360,7 @@ export async function operationsRoutes(app: FastifyInstance) {
       reservations: reservations.rows[0],
       committedBySeller: { reservations: bySeller.rows, orders: ordersBySeller.rows },
       oldestCommitted: oldestCommitted.rows,
+      recentCommitted: { ...recentCommitted.rows[0], days: settings.alerts.committedWithoutPostingDays },
       virtualCheck: { ...virtualCheck, different: virtualCheck.different.slice(0, 20) },
       syncFailures: syncFailures.rows,
       alerts: alerts.rows,

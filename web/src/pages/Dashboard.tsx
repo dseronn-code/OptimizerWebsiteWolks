@@ -16,6 +16,7 @@ interface Dash {
   syncFailures: { kind: string; started_at: string; error: string }[];
   alerts: { severity: string; n: number }[];
   virtualCheck: { checked: number; matching: number; blingNoReservation: number; different: { sku: string; physical: number; virtual: number; blingReserved: number; openOrders: number }[] };
+  recentCommitted: { orders: number; units: number; days: number };
   oldestCommitted: { id: number; number: number | null; order_date: string | null; customer_name: string | null; situation: string | null; items: number; units: number; age_days: number | null }[];
   recentReservationChanges: { at: string; action: string; from_status: string | null; to_status: string | null; user_name: string | null; sku: string; quantity: number; customer_name: string }[];
 }
@@ -85,8 +86,11 @@ export default function Dashboard() {
           {data.oldestCommitted.length > 0 && (
             <section className="card overflow-hidden">
               <div className="border-b border-slate-100 px-4 py-2">
-                <h2 className="text-sm font-semibold">Pedidos em aberto mais antigos (prendem estoque)</h2>
-                <p className="text-xs text-slate-500">Se algum já foi entregue ou desistido, atualize a situação no Bling (Atendido ou Cancelado) para liberar o estoque.</p>
+                <h2 className="text-sm font-semibold">Pedidos parados há mais de {data.recentCommitted.days} dias (prendem estoque)</h2>
+                <p className="text-xs text-slate-500">
+                  Confira se ainda vão ser entregues. Se já foram entregues ou o cliente desistiu, atualize a situação no Bling (Atendido ou Cancelado) para liberar o estoque.
+                  {data.recentCommitted.orders > 0 && <> Além destes, {data.recentCommitted.orders} pedido(s) recente(s) ({num(Number(data.recentCommitted.units))} un.) também prendem estoque — normal, dentro do prazo.</>}
+                </p>
               </div>
               <Table columns={['Pedido', 'Data', 'Há', 'Cliente', 'Situação', 'Itens', 'Unidades']}>
                 {data.oldestCommitted.map((o) => (
