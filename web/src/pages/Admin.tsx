@@ -116,6 +116,24 @@ function RulesTab({ editable }: { editable: boolean }) {
   useEffect(() => {
     void load();
   }, []);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const suggest = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ applied: { name: string; label: string }[]; skipped: { name: string }[] }>('/api/admin/situations/suggest');
+      setResult(
+        `Configuradas: ${r.applied.map((a) => a.name).join(', ') || 'nenhuma'}.` +
+          (r.skipped.length ? ` Sem sugestão (configure manualmente): ${r.skipped.map((x) => x.name).join(', ')}.` : ''),
+      );
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const save = async (r: any, patch: any) => {
     const next = { ...r, ...patch };
     try {
@@ -136,6 +154,16 @@ function RulesTab({ editable }: { editable: boolean }) {
         Defina o que cada situação de pedido do Bling significa comercialmente e se, nessa situação, o estoque já foi baixado. Situações sem regra são tratadas
         como compromisso por precaução e deixam a disponibilidade "não confirmada". Situações personalizadas herdam a regra da situação de origem quando não têm regra própria.
       </p>
+      {editable && rows.some((r) => !r.category) && (
+        <div className="card flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50 p-4">
+          <p className="text-sm text-brand-900">
+            Há <b>{rows.filter((r) => !r.category).length}</b> situação(ões) sem regra. O sistema pode configurar automaticamente pelo nome
+            (Atendido, Cancelado, Em aberto…), de forma conservadora. Você pode ajustar depois.
+          </p>
+          <button className="btn-primary" onClick={suggest} disabled={busy}>{busy ? 'Aplicando…' : 'Aplicar configuração recomendada'}</button>
+        </div>
+      )}
+      {result && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{result}</p>}
       <ErrorMsg error={error} />
       <div className="card overflow-hidden">
         <Table columns={['Situação', 'Pedidos', 'Significado comercial', 'Estoque físico', 'Saldo virtual']}>

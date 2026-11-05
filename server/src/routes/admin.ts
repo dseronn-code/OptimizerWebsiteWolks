@@ -10,6 +10,7 @@ import { purgeDemoData } from '../demo/purge.js';
 import { parse } from '../lib/http.js';
 import { getSettings, updateSettings } from '../lib/settings.js';
 import { enqueue } from '../sync/jobs.js';
+import { applySuggestedRules } from '../sync/situationSuggestions.js';
 import { ingestEvent, verifySignature } from '../sync/webhooks.js';
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -117,6 +118,14 @@ export async function adminRoutes(app: FastifyInstance) {
        ORDER BY s.name`,
     );
     return send(reply, { situations: rows });
+  });
+
+  app.post('/api/admin/situations/suggest', async (req, reply) => {
+    const admin = requireUser(req, ['admin']);
+    const r = await applySuggestedRules(admin.id);
+    await audit({ userId: admin.id, action: 'situation_rule.suggested', details: r, ip: req.ip });
+    await enqueue('alerts_scan', {}, { dedupeKey: 'alerts_scan' });
+    return send(reply, r);
   });
 
   app.put('/api/admin/situations/:id/rule', async (req, reply) => {
