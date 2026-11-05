@@ -23,6 +23,8 @@ export interface BlingProductDetail extends BlingProductSummary {
   unidade?: string | null;
   gtin?: string | null;
   estrutura?: {
+    tipoEstoque?: 'F' | 'V';
+    lancamentoEstoque?: 'A' | 'M' | 'P';
     componentes?: { produto: { id: number }; quantidade: number }[];
   };
   variacoes?: BlingProductSummary[];

@@ -130,6 +130,11 @@ export async function syncProducts(client: BlingClient, opts: { since?: string }
       const detail = await client.getProduct(id);
       if (!detail) continue;
       await upsertProduct(pool, detail, sourceOf(client));
+      await pool.query('UPDATE products SET kit_stock_type = $2, kit_stock_posting = $3 WHERE id = $1', [
+        id,
+        detail.estrutura?.tipoEstoque ?? null,
+        detail.estrutura?.lancamentoEstoque ?? null,
+      ]);
       await withTransaction(async (tx) => {
         await tx.query('DELETE FROM product_components WHERE product_id = $1', [id]);
         for (const c of detail.estrutura?.componentes ?? []) {

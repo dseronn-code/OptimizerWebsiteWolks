@@ -54,7 +54,9 @@ export async function getAvailability(productId: number, opts: AvailabilityOptio
   const settings = await getSettings();
   const product = await getProduct(productId);
   if (!product) return null;
-  const components = product.format === 'E' ? await getKitComponents(productId) : [];
+  // Kit com estoque FÍSICO próprio no Bling é tratado como produto comum (usa o saldo do kit);
+  // kit com estoque VIRTUAL é calculado pelos componentes.
+  const components = product.format === 'E' && product.kit_stock_type !== 'F' ? await getKitComponents(productId) : [];
   const ids = [productId, ...components.map((c) => c.component_id)];
 
   let refresh = { refreshed: false, error: null as string | null };

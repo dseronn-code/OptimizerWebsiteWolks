@@ -19,7 +19,7 @@ import { getAvailability } from '../src/stock/stockService.js';
 import { purgeDemoData } from '../src/demo/purge.js';
 import { runDueJobs } from '../src/sync/jobs.js';
 import { jobHandlers, processWebhookEvent } from '../src/sync/processors.js';
-import { runFullSync, syncSalesOrders, upsertSalesOrder } from '../src/sync/syncService.js';
+import { runFullSync, syncAllBalances, syncProducts, syncSalesOrders, upsertSalesOrder } from '../src/sync/syncService.js';
 import { ingestEvent } from '../src/sync/webhooks.js';
 
 /**
@@ -510,5 +510,40 @@ describe('verificação em duas etapas (2FA)', () => {
     expect(validatePasswordPolicy('senha12345')).toMatch(/comum/);
     expect(validatePasswordPolicy('davi123456789', ['davi@empresa.com'])).toMatch(/usuário/);
     expect(validatePasswordPolicy('Kq8!zT2pLm')).toBeNull();
+  });
+});
+
+describe('kits (produtos com composição)', () => {
+  const KIT_F = 5101;
+  const KIT_V = 5102;
+
+  async function addKits() {
+    fake.state.products.push(
+      { id: KIT_F, nome: 'Kit com estoque próprio', codigo: 'KIT-F', formato: 'E', situacao: 'A', estrutura: { tipoEstoque: 'F', lancamentoEstoque: 'P', componentes: [{ produto: { id: PRODUCT }, quantidade: 2 }] } } as any,
+      { id: KIT_V, nome: 'Kit virtual', codigo: 'KIT-V', formato: 'E', situacao: 'A', estrutura: { tipoEstoque: 'V', lancamentoEstoque: 'M', componentes: [{ produto: { id: PRODUCT }, quantidade: 2 }] } } as any,
+    );
+    fake.state.balances.push({ productId: KIT_F, depositId: DEP_A, physical: -7, virtual: -7 });
+    await syncProducts(fake);
+    await syncAllBalances(fake);
+  }
+
+  it('kit com estoque FÍSICO usa o saldo do próprio kit (inclusive negativo)', async () => {
+    await addKits();
+    const r = await getAvailability(KIT_F);
+    expect(r?.kit).toBeNull();
+    expect(r?.physicalTotal).toBe(-7);
+    expect(r?.issues.map((i) => i.code)).toContain('NEGATIVE_BALANCE');
+  });
+
+  it('kit VIRTUAL é calculado pelos componentes; pedido de kit físico não desconta componentes', async () => {
+    await addKits();
+    expect((await getAvailability(KIT_V))?.kit?.availableForSale).toBe(5); // 10 un. / 2 por kit
+    fake.state.salesOrders.push(
+      { id: 950, numero: 50, data: new Date().toISOString().slice(0, 10), contato: { id: 9, nome: 'C' }, situacao: { id: SIT_CONFIRMADO }, itens: [{ id: 50, quantidade: 1, produto: { id: KIT_F } }] },
+      { id: 951, numero: 51, data: new Date().toISOString().slice(0, 10), contato: { id: 9, nome: 'C' }, situacao: { id: SIT_CONFIRMADO }, itens: [{ id: 51, quantidade: 1, produto: { id: KIT_V } }] },
+    );
+    await syncSalesOrders(fake, { full: true });
+    // só o kit virtual (2 un. do componente) prende o produto simples
+    expect((await getAvailability(PRODUCT))?.availableForSale).toBe(8);
   });
 });

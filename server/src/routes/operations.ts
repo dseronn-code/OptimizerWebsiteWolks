@@ -16,7 +16,7 @@ import {
   reservationHistory,
   ReservationError,
 } from '../reservations/reservationService.js';
-import { loadEngineInput } from '../stock/repository.js';
+import { loadEngineInput, loadSyncHealth } from '../stock/repository.js';
 import { canSeeCustomer } from '../stock/stockService.js';
 
 const MANAGERS = ['gestor', 'admin'] as const;
@@ -232,27 +232,54 @@ export async function operationsRoutes(app: FastifyInstance) {
     const q = parse(z.object({ depositId: z.coerce.number().optional(), q: z.string().max(80).optional() }), req.query);
     const settings = await getSettings();
     const now = new Date();
-    const { rows: products } = await pool.query(
-      `SELECT DISTINCT p.id FROM products p JOIN stock_balances b ON b.product_id = p.id
-       WHERE p.active AND p.format <> 'V' AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%') LIMIT 1000`,
-      [q.q ?? null],
+    // Produtos "com movimento" (pedidos em aberto, reservas, bloqueios, saldo zero/negativo, kits) passam
+    // pelo motor completo; os demais só dependem da atualidade do saldo — assim o painel cobre o catálogo
+    // inteiro sem recalcular milhares de produtos parados.
+    const filterSql = `p.active AND p.format <> 'V' AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
+      AND EXISTS (SELECT 1 FROM stock_balances b JOIN deposits d ON d.id = b.deposit_id
+                  WHERE b.product_id = p.id AND NOT d.ignore_balance AND ($2::bigint IS NULL OR b.deposit_id = $2))`;
+    const params = [q.q ?? null, q.depositId ?? null];
+    const { rows: busy } = await pool.query<{ id: number }>(
+      `SELECT p.id FROM products p WHERE ${filterSql} AND (
+         p.format = 'E'
+         OR EXISTS (SELECT 1 FROM stock_balances b WHERE b.product_id = p.id AND b.physical <= 0)
+         OR EXISTS (SELECT 1 FROM reservations r WHERE r.product_id = p.id AND r.status IN ('ACTIVE', 'EXPIRED', 'PENDING'))
+         OR EXISTS (SELECT 1 FROM stock_blocks k WHERE k.product_id = p.id AND k.active)
+         OR EXISTS (SELECT 1 FROM sales_order_items i JOIN sales_orders o ON o.id = i.order_id
+                    LEFT JOIN situations s ON s.id = o.situation_id
+                    LEFT JOIN situation_rules r1 ON r1.situation_id = o.situation_id LEFT JOIN situation_rules r2 ON r2.situation_id = s.inherited_id
+                    WHERE i.product_id = p.id AND NOT o.deleted
+                      AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'UNMAPPED')))`,
+      params,
     );
     let confirmed = 0;
     let unconfirmed = 0;
     const atRisk: unknown[] = [];
     const divergent: unknown[] = [];
-    for (const { id } of products) {
+    for (const { id } of busy) {
       const input = await loadEngineInput(id, settings, now);
       if (!input) continue;
       const r = calculateAvailability(input);
       const dep = q.depositId ? r.byDeposit.find((d) => d.depositId === q.depositId) : null;
-      if (q.depositId && !dep) continue;
       if (r.status === 'CONFIRMED') confirmed++;
       else unconfirmed++;
       const row = { id, sku: r.product.sku, name: r.product.name, physical: dep ? dep.physical : r.physicalTotal, available: dep ? dep.available : r.available, availableForSale: dep ? dep.availableForSale : r.availableForSale, status: r.status, issues: r.issues.map((i) => i.code) };
       if ((row.available ?? 0) < 0 || r.issues.some((i) => i.code === 'OVERCOMMITTED')) atRisk.push(row);
       if (r.issues.some((i) => ['NEGATIVE_BALANCE', 'OVERCOMMITTED', 'POSSIBLE_DUPLICATE', 'UNMAPPED_SITUATION', 'UNKNOWN_STOCK_EFFECT'].includes(i.code))) divergent.push(row);
     }
+    const busyIds = busy.map((b) => b.id);
+    const health = await loadSyncHealth(settings, now);
+    const quiet = await pool.query<{ total: number; stale: number }>(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE (SELECT MIN(b.fetched_at) FROM stock_balances b JOIN deposits d ON d.id = b.deposit_id
+                                      WHERE b.product_id = p.id AND NOT d.ignore_balance) < now() - ($3 || ' minutes')::interval)::int AS stale
+       FROM products p WHERE ${filterSql} AND NOT (p.id = ANY($4))`,
+      [...params, String(settings.engine.maxBalanceAgeMinutes), busyIds],
+    );
+    const quietUnconfirmed = health.lastSyncFailed ? quiet.rows[0].total : quiet.rows[0].stale;
+    confirmed += quiet.rows[0].total - quietUnconfirmed;
+    unconfirmed += quietUnconfirmed;
+    const products = { length: busy.length + quiet.rows[0].total };
     const orderStats = await pool.query(
       `SELECT COALESCE(r1.category, r2.category, 'UNMAPPED') AS category, s.name AS situation, COUNT(DISTINCT o.id)::int AS orders, SUM(i.quantity) AS units
        FROM sales_orders o JOIN sales_order_items i ON i.order_id = o.id LEFT JOIN situations s ON s.id = o.situation_id

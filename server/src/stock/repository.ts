@@ -19,6 +19,7 @@ const CLOSED_ORDERS_WINDOW_DAYS = 30;
 
 export interface ProductRow {
   id: number;
+  kit_stock_type: string | null;
   sku: string | null;
   name: string;
   unit: string | null;
@@ -29,7 +30,7 @@ export interface ProductRow {
 }
 
 export async function getProduct(id: number, db: Db = pool): Promise<ProductRow | null> {
-  const { rows } = await db.query<ProductRow>('SELECT id, sku, name, unit, format, active, parent_id, source FROM products WHERE id = $1', [id]);
+  const { rows } = await db.query<ProductRow>('SELECT id, sku, name, unit, format, active, parent_id, source, kit_stock_type FROM products WHERE id = $1', [id]);
   return rows[0] ?? null;
 }
 
@@ -90,6 +91,8 @@ export async function loadCommitments(productId: number, db: Db = pool): Promise
        UNION ALL
        SELECT pc.product_id, pc.quantity, kp.sku FROM product_components pc JOIN products kp ON kp.id = pc.product_id
        WHERE pc.component_id = $1
+         -- só kits cuja venda baixa os componentes (estoque virtual, ou lançamento em componentes)
+         AND (COALESCE(kp.kit_stock_type, 'V') = 'V' OR kp.kit_stock_posting IN ('M', 'A'))
      ) k ON k.item_product_id = i.product_id
      JOIN sales_orders o ON o.id = i.order_id AND NOT o.deleted
      ${RULE_JOIN}
