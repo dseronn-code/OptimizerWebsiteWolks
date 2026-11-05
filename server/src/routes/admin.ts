@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit } from '../audit/audit.js';
-import { createUser, hashPassword, revokeUserSessions, validatePasswordPolicy } from '../auth/authService.js';
+import { createUser, hashPassword, resetMfa, revokeUserSessions, validatePasswordPolicy } from '../auth/authService.js';
 import { HttpError, requireUser, send } from '../auth/guard.js';
 import { connectionStatus, createAuthorizationUrl, disconnect, handleOAuthCallback } from '../bling/oauth.js';
 import { config } from '../config.js';
@@ -16,7 +16,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ usuários
   app.get('/api/admin/users', async (req, reply) => {
     requireUser(req, ['admin']);
-    const { rows } = await pool.query('SELECT id, username, name, email, role, bling_seller_id, active, pending_approval, locked_until, created_at FROM users ORDER BY pending_approval DESC, name');
+    const { rows } = await pool.query('SELECT id, username, name, email, role, bling_seller_id, active, pending_approval, locked_until, created_at, totp_enabled_at IS NOT NULL AS mfa_enabled FROM users ORDER BY pending_approval DESC, name');
     return send(reply, { users: rows });
   });
 
@@ -40,7 +40,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const admin = requireUser(req, ['admin']);
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
     const body = parse(
-      z.object({ name: z.string().trim().min(2).max(120).optional(), role: z.enum(['vendedor', 'gestor', 'admin']).optional(), blingSellerId: z.number().int().positive().nullable().optional(), active: z.boolean().optional(), password: z.string().max(200).optional(), approve: z.boolean().optional() }),
+      z.object({ name: z.string().trim().min(2).max(120).optional(), role: z.enum(['vendedor', 'gestor', 'admin']).optional(), blingSellerId: z.number().int().positive().nullable().optional(), active: z.boolean().optional(), password: z.string().max(200).optional(), approve: z.boolean().optional(), resetMfa: z.boolean().optional(), revokeSessions: z.boolean().optional() }),
       req.body,
     );
     if (id === admin.id && (body.active === false || (body.role && body.role !== 'admin'))) throw new HttpError(400, 'Você não pode desativar ou rebaixar o próprio usuário.');
@@ -61,7 +61,8 @@ export async function adminRoutes(app: FastifyInstance) {
       await pool.query('UPDATE users SET pending_approval = false, active = $2, updated_at = now() WHERE id = $1', [id, body.approve]);
       await pool.query("UPDATE alerts SET status = 'resolved', resolved_at = now(), updated_at = now() WHERE dedupe_key = $1", [`signup_pending:${id}`]);
     }
-    if (body.active === false || body.password || body.role) await revokeUserSessions(id);
+    if (body.resetMfa) await resetMfa(id);
+    if (body.active === false || body.password || body.role || body.revokeSessions) await revokeUserSessions(id);
     await audit({ userId: admin.id, action: 'user.update', entity: 'user', entityId: id, details: { ...body, password: body.password ? '***' : undefined }, ip: req.ip });
     return send(reply, { ok: true });
   });
@@ -85,6 +86,7 @@ export async function adminRoutes(app: FastifyInstance) {
     reservations: z.object({ defaultValidityHours: z.number().min(1).max(24 * 60).optional(), maxValidityDays: z.number().int().min(1).max(90).optional(), expiringSoonHours: z.number().min(1).max(240).optional(), autoApproveSellers: z.boolean().optional() }).optional(),
     privacy: z.object({ sellersSeeAllCustomers: z.boolean().optional() }).optional(),
     alerts: z.object({ staleOpportunityDays: z.number().int().min(1).max(90).optional(), committedWithoutPostingDays: z.number().int().min(1).max(90).optional() }).optional(),
+    security: z.object({ mfaRequiredFor: z.array(z.enum(['vendedor', 'gestor', 'admin'])).max(3).optional() }).optional(),
     signup: z.object({
       enabled: z.boolean().optional(),
       requireApproval: z.boolean().optional(),

@@ -4,6 +4,8 @@ import { pool } from './db/pool.js';
 import { purgeDemoData } from './demo/purge.js';
 import { getSettings } from './lib/settings.js';
 
+const DEMO_USERNAMES = ['admin', 'gestor', 'ana', 'bruno'];
+
 /**
  * Primeira inicialização (útil em hospedagens sem acesso a terminal):
  *  - SEED_DEMO_IF_EMPTY=true → banco sem usuários recebe o ambiente de demonstração;
@@ -25,6 +27,22 @@ export async function bootstrap(log: (msg: string) => void): Promise<void> {
   if ((await getSettings()).appMode === 'live') {
     const purged = await purgeDemoData();
     if (purged.removedProducts) log(`dados de demonstração removidos (${purged.removedProducts} produtos fictícios)`);
+    // Usuários de demonstração usam senha compartilhada: são desativados no uso real,
+    // desde que exista outro administrador ativo (para ninguém ficar trancado para fora).
+    const otherAdmin = await pool.query(
+      "SELECT 1 FROM users WHERE role = 'admin' AND active AND NOT pending_approval AND NOT (username = ANY($1) AND name LIKE '%(demo)%') LIMIT 1",
+      [DEMO_USERNAMES],
+    );
+    if (otherAdmin.rowCount) {
+      const off = await pool.query(
+        "UPDATE users SET active = false, updated_at = now() WHERE active AND username = ANY($1) AND name LIKE '%(demo)%' RETURNING username",
+        [DEMO_USERNAMES],
+      );
+      if (off.rowCount) {
+        await pool.query('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE username = ANY($1) AND NOT active)', [DEMO_USERNAMES]);
+        log(`usuários de demonstração desativados: ${off.rows.map((r) => r.username).join(', ')}`);
+      }
+    }
   }
 
   const username = config.BOOTSTRAP_ADMIN_USERNAME?.trim().toLowerCase();

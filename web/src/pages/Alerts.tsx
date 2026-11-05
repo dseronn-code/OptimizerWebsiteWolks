@@ -33,6 +33,11 @@ const TYPE_LABEL: Record<string, string> = {
   PARTIAL_DELIVERY_NOT_POSTED: 'Entrega sem baixa',
   INSUFFICIENT_FOR_SALE: 'Estoque insuficiente para venda',
   SIGNUP_PENDING: 'Cadastro aguardando aprovação',
+  SECURITY_NEW_LOGIN: 'Segurança: acesso de local novo',
+  SECURITY_BRUTE_FORCE: 'Segurança: tentativa de invasão',
+  SECURITY_ACCOUNT_LOCKED: 'Segurança: conta bloqueada',
+  SECURITY_MFA_FAILED: 'Segurança: código 2FA errado',
+  SECURITY_RECOVERY_CODE_USED: 'Segurança: código de recuperação usado',
 };
 
 export default function Alerts() {

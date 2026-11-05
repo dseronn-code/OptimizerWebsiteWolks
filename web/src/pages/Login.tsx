@@ -1,10 +1,10 @@
-import { ArrowLeft, MailCheck } from 'lucide-react';
+import { ArrowLeft, KeyRound, MailCheck, ShieldCheck } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { BRAND } from '../brand';
 
-type Mode = 'login' | 'signup' | 'code' | 'pending';
+type Mode = 'login' | 'signup' | 'code' | 'pending' | 'mfa-verify' | 'mfa-setup';
 
 interface SignupStatus {
   enabled: boolean;
@@ -16,6 +16,7 @@ export default function Login() {
   const [mode, setMode] = useState<Mode>('login');
   const [signup, setSignup] = useState<SignupStatus | null>(null);
   const [pendingEmail, setPendingEmail] = useState<{ verificationId: string; email: string } | null>(null);
+  const [challenge, setChallenge] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<SignupStatus>('/api/auth/signup').then(setSignup).catch(() => setSignup(null));
@@ -33,7 +34,18 @@ export default function Login() {
               <p className="text-xs text-slate-500">{BRAND.tagline}</p>
             </div>
           </div>
-          {mode === 'login' && <LoginForm canSignup={Boolean(signup?.enabled)} onSignup={() => setMode('signup')} />}
+          {mode === 'login' && (
+            <LoginForm
+              canSignup={Boolean(signup?.enabled)}
+              onSignup={() => setMode('signup')}
+              onMfa={(step, ch) => {
+                setChallenge(ch);
+                setMode(step === 'verify' ? 'mfa-verify' : 'mfa-setup');
+              }}
+            />
+          )}
+          {mode === 'mfa-verify' && challenge && <MfaVerifyForm challenge={challenge} onRestart={() => setMode('login')} />}
+          {mode === 'mfa-setup' && challenge && <MfaSetupForm challenge={challenge} onRestart={() => setMode('login')} />}
           {mode === 'signup' && signup && (
             <SignupForm
               status={signup}
@@ -67,7 +79,7 @@ function ErrorBox({ children }: { children: ReactNode }) {
   return <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{children}</p>;
 }
 
-function LoginForm({ canSignup, onSignup }: { canSignup: boolean; onSignup: () => void }) {
+function LoginForm({ canSignup, onSignup, onMfa }: { canSignup: boolean; onSignup: () => void; onMfa: (step: 'verify' | 'setup', challenge: string) => void }) {
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -79,7 +91,8 @@ function LoginForm({ canSignup, onSignup }: { canSignup: boolean; onSignup: () =
     setBusy(true);
     setError(null);
     try {
-      await login(username, password);
+      const r = await login(username, password);
+      if ('mfa' in r) onMfa(r.mfa, r.challenge);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -222,6 +235,144 @@ function CodeForm({ data, onBack, onPending }: { data: { verificationId: string;
       <button type="button" className="w-full text-sm text-brand-600 disabled:text-slate-400" onClick={resend} disabled={cooldown > 0}>
         {cooldown > 0 ? `Reenviar código em ${cooldown}s` : 'Reenviar código'}
       </button>
+    </form>
+  );
+}
+
+function MfaVerifyForm({ challenge, onRestart }: { challenge: string; onRestart: () => void }) {
+  const { refresh } = useAuth();
+  const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ recoveryCodesLeft: number | null }>('/api/auth/mfa/verify', { challenge, code });
+      if (r.recoveryCodesLeft !== null) alert(`Você usou um código de recuperação. Restam ${r.recoveryCodesLeft}. Se perdeu o celular, peça ao administrador para refazer seu 2FA.`);
+      await refresh();
+    } catch (err) {
+      const msg = (err as Error).message;
+      setError(msg);
+      if (/Entre novamente/.test(msg)) setTimeout(onRestart, 2500);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="text-center">
+        <ShieldCheck className="mx-auto text-brand-600" size={36} />
+        <h2 className="mt-2 font-semibold text-slate-900">Verificação em duas etapas</h2>
+        <p className="text-sm text-slate-600">
+          {useRecovery ? 'Digite um dos seus códigos de recuperação.' : 'Abra o app autenticador no celular e digite o código de 6 dígitos.'}
+        </p>
+      </div>
+      <input
+        className="input text-center text-2xl font-semibold tracking-[0.3em]"
+        inputMode={useRecovery ? 'text' : 'numeric'}
+        autoComplete="one-time-code"
+        maxLength={useRecovery ? 11 : 6}
+        placeholder={useRecovery ? 'XXXXX-XXXXX' : '000000'}
+        value={code}
+        onChange={(e) => setCode(useRecovery ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
+        aria-label="Código de verificação"
+        autoFocus
+        required
+      />
+      {error && <ErrorBox>{error}</ErrorBox>}
+      <button className="btn-primary w-full" disabled={busy || code.length < 6}>{busy ? 'Verificando…' : 'Entrar'}</button>
+      <button type="button" className="w-full text-sm text-brand-600" onClick={() => { setUseRecovery((v) => !v); setCode(''); }}>
+        {useRecovery ? 'Usar o código do app autenticador' : 'Perdi o celular: usar código de recuperação'}
+      </button>
+    </form>
+  );
+}
+
+function MfaSetupForm({ challenge, onRestart }: { challenge: string; onRestart: () => void }) {
+  const { refresh } = useAuth();
+  const [qr, setQr] = useState<{ secret: string; qrDataUrl: string } | null>(null);
+  const [code, setCode] = useState('');
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.post<{ secret: string; qrDataUrl: string }>('/api/auth/mfa/setup', { challenge }).then(setQr).catch((err) => setError((err as Error).message));
+  }, [challenge]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ recoveryCodes: string[] }>('/api/auth/mfa/setup/confirm', { challenge, code });
+      setCodes(r.recoveryCodes);
+    } catch (err) {
+      const msg = (err as Error).message;
+      setError(msg);
+      if (/Entre novamente/.test(msg)) setTimeout(onRestart, 2500);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (codes) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center">
+          <KeyRound className="mx-auto text-emerald-600" size={36} />
+          <h2 className="mt-2 font-semibold text-slate-900">Guarde seus códigos de recuperação</h2>
+          <p className="text-sm text-slate-600">Se perder o celular, cada código abaixo permite entrar <b>uma vez</b>. Anote em papel ou num lugar seguro. Eles não serão mostrados de novo.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 font-mono text-sm">
+          {codes.map((c) => <span key={c} className="text-center">{c}</span>)}
+        </div>
+        <button className="btn-primary w-full" onClick={() => refresh()}>Já guardei, entrar no sistema</button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="text-center">
+        <ShieldCheck className="mx-auto text-brand-600" size={36} />
+        <h2 className="mt-2 font-semibold text-slate-900">Ative a verificação em duas etapas</h2>
+        <p className="text-sm text-slate-600">Obrigatória para o seu perfil. Use um app autenticador gratuito: <b>Google Authenticator</b> ou <b>Microsoft Authenticator</b>.</p>
+      </div>
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
+        <li>Instale o app no celular.</li>
+        <li>No app, toque em <b>+</b> e <b>Ler código QR</b>.</li>
+        <li>Aponte para o QR abaixo e digite o código de 6 dígitos que aparecer.</li>
+      </ol>
+      {qr ? (
+        <div className="flex flex-col items-center gap-2">
+          <img src={qr.qrDataUrl} alt="QR Code para o app autenticador" className="h-48 w-48 rounded-lg ring-1 ring-slate-200" />
+          <details className="text-center text-xs text-slate-500">
+            <summary className="cursor-pointer">Está no próprio celular? Digite esta chave no app</summary>
+            <code className="mt-1 block break-all font-mono text-slate-700">{qr.secret.replace(/(.{4})/g, '$1 ').trim()}</code>
+          </details>
+        </div>
+      ) : (
+        !error && <p className="text-center text-sm text-slate-500">Gerando QR Code…</p>
+      )}
+      <input
+        className="input text-center text-2xl font-semibold tracking-[0.5em]"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        placeholder="000000"
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        aria-label="Código do app autenticador"
+        required
+      />
+      {error && <ErrorBox>{error}</ErrorBox>}
+      <button className="btn-primary w-full" disabled={busy || code.length !== 6 || !qr}>{busy ? 'Confirmando…' : 'Confirmar e ativar'}</button>
     </form>
   );
 }

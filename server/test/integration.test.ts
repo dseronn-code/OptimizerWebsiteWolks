@@ -5,6 +5,7 @@ import { answerQuestion } from '../src/ai/agent.js';
 import { simplifySchema } from '../src/ai/openaiCompatAgent.js';
 import { config } from '../src/config.js';
 import { setEmailTransportForTests } from '../src/lib/email.js';
+import { currentCounter, totpAt } from '../src/lib/totp.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createUser } from '../src/auth/authService.js';
@@ -75,9 +76,9 @@ afterAll(async () => {
 beforeEach(async () => {
   await pool.query(`TRUNCATE reservations, reservation_history, sales_orders, sales_order_items, sales_order_situation_history,
     stock_balances, product_components, products, deposits, situations, situation_rules, sync_state, sync_runs, jobs,
-    webhook_events, alerts, audit_log, query_history, sessions, users, settings, order_overrides, item_fulfillments, email_verifications CASCADE`);
+    webhook_events, alerts, audit_log, query_history, sessions, users, settings, order_overrides, item_fulfillments, email_verifications, mfa_challenges CASCADE`);
   clearSettingsCache();
-  await updateSettings({ appMode: 'demo', reservations: { autoApproveSellers: true } as any }, null);
+  await updateSettings({ appMode: 'demo', reservations: { autoApproveSellers: true } as any, security: { mfaRequiredFor: [] } }, null);
   fake = new FakeBlingClient(freshState());
   setBlingClientOverride(fake);
   await pool.query(
@@ -446,5 +447,68 @@ describe('passagem para o Bling real', () => {
     const users = await pool.query('SELECT COUNT(*)::int AS n FROM users');
     expect(users.rows[0].n).toBe(3);
     expect((await purgeDemoData()).removedProducts).toBe(0); // idempotente
+  });
+});
+
+describe('verificação em duas etapas (2FA)', () => {
+  const H = { 'x-requested-with': 'bling-stock-ai', 'content-type': 'application/json' };
+
+  it('gestor precisa cadastrar o app autenticador; depois entra só com senha + código', async () => {
+    await updateSettings({ security: { mfaRequiredFor: ['admin', 'gestor'] } }, null);
+    const app = await buildApp({ logger: false });
+    const first = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ mfa: 'setup' });
+    expect(first.cookies.find((c) => c.name === 'bsa_session')).toBeUndefined(); // sem sessão antes do 2FA
+    const { challenge } = first.json();
+
+    const setup = (await app.inject({ method: 'POST', url: '/api/auth/mfa/setup', headers: H, payload: { challenge } })).json();
+    expect(setup.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(setup.otpauthUrl).toContain('otpauth://totp/');
+    const bad = await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: '000000' } });
+    expect(bad.statusCode).toBe(401);
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: totpAt(setup.secret, currentCounter()) } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().recoveryCodes).toHaveLength(8);
+    const recovery = ok.json().recoveryCodes[0];
+
+    // próximo login: senha + código (o mesmo código não pode ser reutilizado)
+    const second = (await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } })).json();
+    expect(second.mfa).toBe('verify');
+    const reuse = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: second.challenge, code: totpAt(setup.secret, currentCounter()) } });
+    expect(reuse.statusCode).toBe(401);
+    const next = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: second.challenge, code: totpAt(setup.secret, currentCounter() + 1) } });
+    expect(next.statusCode).toBe(200);
+    expect(next.cookies.find((c) => c.name === 'bsa_session')).toBeTruthy();
+
+    // código de recuperação funciona uma única vez
+    const third = (await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } })).json();
+    const rec = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: third.challenge, code: recovery } });
+    expect(rec.statusCode).toBe(200);
+    expect(rec.json().recoveryCodesLeft).toBe(7);
+    const fourth = (await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } })).json();
+    const again = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: fourth.challenge, code: recovery } });
+    expect(again.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('5 códigos errados invalidam a etapa e geram alerta de segurança', async () => {
+    await updateSettings({ security: { mfaRequiredFor: ['gestor'] } }, null);
+    const app = await buildApp({ logger: false });
+    const { challenge } = (await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } })).json();
+    await app.inject({ method: 'POST', url: '/api/auth/mfa/setup', headers: H, payload: { challenge } });
+    for (let i = 0; i < 5; i++) await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: '000000' } });
+    const blocked = await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: '123456' } });
+    expect([401, 429]).toContain(blocked.statusCode);
+    const alerts = await pool.query("SELECT 1 FROM alerts WHERE type = 'SECURITY_MFA_FAILED'");
+    expect(alerts.rowCount).toBeGreaterThan(0);
+    await app.close();
+  });
+
+  it('senhas óbvias são recusadas', async () => {
+    const { validatePasswordPolicy } = await import('../src/auth/authService.js');
+    expect(validatePasswordPolicy('senha12345')).toMatch(/comum/);
+    expect(validatePasswordPolicy('davi123456789', ['davi@empresa.com'])).toMatch(/usuário/);
+    expect(validatePasswordPolicy('Kq8!zT2pLm')).toBeNull();
   });
 });

@@ -127,6 +127,16 @@ function Footer({ user, status, ordersAt, onLogout }: { user: ReturnType<typeof 
         </div>
         <button className="btn-secondary px-2" onClick={onLogout} title="Sair" aria-label="Sair"><LogOut size={16} /></button>
       </div>
+      <button
+        className="text-left text-[11px] text-slate-400 underline hover:text-rose-600"
+        onClick={async () => {
+          if (!confirm('Sair desta conta em TODOS os aparelhos (celulares e computadores)?')) return;
+          await api.post('/api/auth/logout-all').catch(() => undefined);
+          window.location.reload();
+        }}
+      >
+        Sair de todos os aparelhos
+      </button>
     </div>
   );
 }

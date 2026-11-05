@@ -2,11 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api } from './api';
 import type { User } from './types';
 
+/** Resultado do login: concluído ou falta a verificação em duas etapas. */
+export type LoginStep = { done: true } | { mfa: 'verify' | 'setup'; challenge: string };
+
 interface AuthState {
   user: User | null;
   appMode: 'demo' | 'live' | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<LoginStep>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -37,9 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('bsa:unauthorized', onUnauthorized);
   }, [refresh]);
 
-  const login = async (username: string, password: string) => {
-    await api.post('/api/auth/login', { username, password });
+  const login = async (username: string, password: string): Promise<LoginStep> => {
+    const r = await api.post<{ user?: User; mfa?: 'verify' | 'setup'; challenge?: string }>('/api/auth/login', { username, password });
+    if (r.mfa && r.challenge) return { mfa: r.mfa, challenge: r.challenge };
     await refresh();
+    return { done: true };
   };
   const logout = async () => {
     await api.post('/api/auth/logout');

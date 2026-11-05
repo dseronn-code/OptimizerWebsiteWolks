@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { answerQuestion } from '../ai/agent.js';
 import { audit } from '../audit/audit.js';
-import { changePassword, createSession, getUserById, login, logout } from '../auth/authService.js';
+import { AuthError, changePassword, confirmMfaSetup, createSession, getUserById, login, logout, revokeUserSessions, startMfaSetup, verifyMfa } from '../auth/authService.js';
 import { resendCode, SignupError, signupStatus, startSignup, verifySignup } from '../auth/signupService.js';
 import { requireUser, send, SESSION_COOKIE, viewerOf, HttpError } from '../auth/guard.js';
 import { aiProvider, config, isProduction } from '../config.js';
@@ -22,6 +22,10 @@ export async function coreRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = parse(z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200) }), req.body);
     const r = await login(body.username, body.password, { ip: req.ip, userAgent: req.headers['user-agent'] });
+    if (!r.ok && r.reason === 'mfa') {
+      // senha correta: falta a verificação em duas etapas (nenhuma sessão é criada ainda)
+      return send(reply, { mfa: r.mfa, challenge: r.challenge });
+    }
     if (!r.ok) {
       await audit({ action: r.reason === 'locked' ? 'auth.locked' : 'auth.failed', details: { username: body.username }, ip: req.ip });
       throw new HttpError(
@@ -36,6 +40,44 @@ export async function coreRoutes(app: FastifyInstance) {
     await audit({ userId: r.user.id, action: 'auth.login', ip: req.ip });
     setSessionCookie(reply, r.token, r.expiresAt);
     return send(reply, { user: r.user });
+  });
+
+  // ------------------------------------------------------------------ verificação em duas etapas
+  const authWrap = <T>(p: Promise<T>) =>
+    p.catch((err) => {
+      if (err instanceof AuthError) throw new HttpError(err.status, err.message);
+      throw err;
+    });
+  const meta = (req: { ip: string; headers: Record<string, unknown> }) => ({ ip: req.ip, userAgent: req.headers['user-agent'] as string | undefined });
+
+  app.post('/api/auth/mfa/verify', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const body = parse(z.object({ challenge: z.string().min(20).max(200), code: z.string().trim().min(6).max(20) }), req.body);
+    const r = await authWrap(verifyMfa(body.challenge, body.code, meta(req)));
+    await audit({ userId: r.user.id, action: 'auth.login', details: { mfa: true, recovery: r.recoveryCodesLeft !== null }, ip: req.ip });
+    setSessionCookie(reply, r.token, r.expiresAt);
+    return send(reply, { user: r.user, recoveryCodesLeft: r.recoveryCodesLeft });
+  });
+
+  app.post('/api/auth/mfa/setup', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const body = parse(z.object({ challenge: z.string().min(20).max(200) }), req.body);
+    return send(reply, await authWrap(startMfaSetup(body.challenge)));
+  });
+
+  app.post('/api/auth/mfa/setup/confirm', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const body = parse(z.object({ challenge: z.string().min(20).max(200), code: z.string().trim().length(6) }), req.body);
+    const r = await authWrap(confirmMfaSetup(body.challenge, body.code, meta(req)));
+    await audit({ userId: r.user.id, action: 'auth.mfa_enabled', ip: req.ip });
+    await audit({ userId: r.user.id, action: 'auth.login', details: { mfa: true }, ip: req.ip });
+    setSessionCookie(reply, r.token, r.expiresAt);
+    return send(reply, { user: r.user, recoveryCodes: r.recoveryCodes });
+  });
+
+  app.post('/api/auth/logout-all', async (req, reply) => {
+    const user = requireUser(req);
+    await revokeUserSessions(user.id);
+    await audit({ userId: user.id, action: 'auth.logout_all', ip: req.ip });
+    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    return send(reply, { ok: true });
   });
 
   // ------------------------------------------------------------------ cadastro com código por e-mail

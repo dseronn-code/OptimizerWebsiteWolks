@@ -226,7 +226,7 @@ function UsersTab() {
       </form>
       <ErrorMsg error={error} />
       <div className="card overflow-hidden">
-        <Table columns={['Usuário', 'Nome', 'Perfil', 'Vendedor Bling', 'Ativo', '']}>
+        <Table columns={['Usuário', 'Nome', 'Perfil', '2FA', 'Vendedor Bling', 'Ativo', '']}>
           {users.map((u) => (
             <tr key={u.id}>
               <td className="td font-mono text-xs">{u.username}</td>
@@ -247,10 +247,15 @@ function UsersTab() {
                   <option value="vendedor">Vendedor</option><option value="gestor">Gestor</option><option value="admin">Administrador</option>
                 </select>
               </td>
+              <td className="td text-xs">{u.mfa_enabled ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">Ativo</span> : <span className="text-slate-400">—</span>}</td>
               <td className="td"><input className="input w-28" defaultValue={u.bling_seller_id ?? ''} onBlur={(e) => update(u.id, { blingSellerId: e.target.value ? Number(e.target.value) : null })} /></td>
               <td className="td"><input type="checkbox" checked={u.active} onChange={(e) => update(u.id, { active: e.target.checked })} /></td>
               <td className="td">
-                <button className="btn-secondary px-2 py-1 text-xs" onClick={() => { const p = prompt('Nova senha (mín. 10 caracteres, letras e números):'); if (p) void update(u.id, { password: p }); }}>Redefinir senha</button>
+                <div className="flex flex-wrap gap-1">
+                  <button className="btn-secondary px-2 py-1 text-xs" onClick={() => { const p = prompt('Nova senha (mín. 10 caracteres, letras e números):'); if (p) void update(u.id, { password: p }); }}>Redefinir senha</button>
+                  {u.mfa_enabled && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => { if (confirm(`Refazer o 2FA de ${u.name}? No próximo login a pessoa cadastra o app autenticador de novo (use se ela perdeu o celular).`)) void update(u.id, { resetMfa: true }); }}>Refazer 2FA</button>}
+                  <button className="btn-secondary px-2 py-1 text-xs" onClick={() => { if (confirm(`Desconectar ${u.name} de todos os aparelhos?`)) void update(u.id, { revokeSessions: true }); }}>Encerrar sessões</button>
+                </div>
               </td>
             </tr>
           ))}
@@ -317,6 +322,20 @@ function SettingsTab({ editable }: { editable: boolean }) {
         {numField('reservations', 'expiringSoonHours', 'Alertar vencimento com antecedência (h)')}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.reservations.autoApproveSellers} onChange={(e) => set('reservations', 'autoApproveSellers', e.target.checked)} /> Aprovar automaticamente reservas de vendedores quando houver saldo confirmado</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.privacy.sellersSeeAllCustomers} onChange={(e) => set('privacy', 'sellersSeeAllCustomers', e.target.checked)} /> Vendedores veem clientes de outros vendedores</label>
+      </section>
+      <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
+        <div className="sm:col-span-3 text-sm font-medium text-slate-700">Verificação em duas etapas (app autenticador) obrigatória para:</div>
+        {(['admin', 'gestor', 'vendedor'] as const).map((r) => (
+          <label key={r} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={!editable || r === 'admin'}
+              checked={s.security.mfaRequiredFor.includes(r)}
+              onChange={(e) => set('security', 'mfaRequiredFor', e.target.checked ? [...s.security.mfaRequiredFor, r] : s.security.mfaRequiredFor.filter((x: string) => x !== r))}
+            />
+            {r === 'admin' ? 'Administradores (sempre)' : r === 'gestor' ? 'Gestores' : 'Vendedores'}
+          </label>
+        ))}
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.signup.enabled} onChange={(e) => set('signup', 'enabled', e.target.checked)} /> Permitir "Criar conta" na tela de login</label>

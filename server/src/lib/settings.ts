@@ -35,6 +35,10 @@ export interface AppSettings {
     staleOpportunityDays: number;
     committedWithoutPostingDays: number;
   };
+  security: {
+    /** Perfis que só entram com verificação em duas etapas (app autenticador). */
+    mfaRequiredFor: ('vendedor' | 'gestor' | 'admin')[];
+  };
   signup: {
     /** Mostra "Criar conta" na tela de login. */
     enabled: boolean;
@@ -59,6 +63,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   privacy: { sellersSeeAllCustomers: false },
   alerts: { staleOpportunityDays: 5, committedWithoutPostingDays: 3 },
   signup: { enabled: true, requireApproval: true, allowedDomains: [] },
+  security: { mfaRequiredFor: ['admin', 'gestor'] },
 };
 
 function merge<T>(base: T, patch: unknown): T {
