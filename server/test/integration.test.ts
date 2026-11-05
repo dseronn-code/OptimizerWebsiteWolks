@@ -467,7 +467,9 @@ describe('verificação em duas etapas (2FA)', () => {
     expect(setup.otpauthUrl).toContain('otpauth://totp/');
     const bad = await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: '000000' } });
     expect(bad.statusCode).toBe(401);
-    const ok = await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: totpAt(setup.secret, currentCounter()) } });
+    // contador fixo: o teste não pode depender de cruzar (ou não) a troca de código a cada 30 s
+    const c0 = currentCounter();
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/mfa/setup/confirm', headers: H, payload: { challenge, code: totpAt(setup.secret, c0) } });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().recoveryCodes).toHaveLength(8);
     const recovery = ok.json().recoveryCodes[0];
@@ -475,9 +477,9 @@ describe('verificação em duas etapas (2FA)', () => {
     // próximo login: senha + código (o mesmo código não pode ser reutilizado)
     const second = (await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } })).json();
     expect(second.mfa).toBe('verify');
-    const reuse = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: second.challenge, code: totpAt(setup.secret, currentCounter()) } });
+    const reuse = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: second.challenge, code: totpAt(setup.secret, c0) } });
     expect(reuse.statusCode).toBe(401);
-    const next = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: second.challenge, code: totpAt(setup.secret, currentCounter() + 1) } });
+    const next = await app.inject({ method: 'POST', url: '/api/auth/mfa/verify', headers: H, payload: { challenge: second.challenge, code: totpAt(setup.secret, c0 + 1) } });
     expect(next.statusCode).toBe(200);
     expect(next.cookies.find((c) => c.name === 'bsa_session')).toBeTruthy();
 
