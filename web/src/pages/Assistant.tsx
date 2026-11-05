@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, MessageSquareText, Search, Send, Sparkles, User as UserIcon } from 'lucide-react';
+import { ArrowRight, Bot, Eraser, MessageSquareText, Search, Send, Sparkles, User as UserIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -55,6 +55,17 @@ export default function Assistant() {
     }
   }, [messages, lastProductId]);
 
+  const clearChat = () => {
+    setMessages([]);
+    setLastProductId(null);
+    setInput('');
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignora */
+    }
+  };
+
   const ask = async (question: string, pickProductId?: number) => {
     const q = question.trim();
     if (!q || busy) return;
@@ -75,8 +86,19 @@ export default function Assistant() {
 
   return (
     <div className="mx-auto flex h-full max-w-4xl flex-col px-3 sm:px-6">
-      <div className="pt-5">
-        <ProductSearch />
+      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-slate-50/90 px-3 pb-2 pt-5 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="min-w-0 flex-1"><ProductSearch /></div>
+        {messages.length > 0 && (
+          <button
+            type="button"
+            onClick={clearChat}
+            disabled={busy}
+            className="btn-secondary shrink-0 px-3 py-2.5"
+            title="Apaga as mensagens desta conversa e começa do zero"
+          >
+            <Eraser size={16} /> <span className="hidden sm:inline">Limpar conversa</span>
+          </button>
+        )}
       </div>
       <div className="flex-1 space-y-4 py-4">
         {messages.length === 0 && (
@@ -148,9 +170,6 @@ export default function Assistant() {
                 {s}
               </button>
             ))}
-            <button type="button" onClick={() => { setMessages([]); setLastProductId(null); }} className="shrink-0 rounded-full px-2.5 py-1 text-xs text-slate-500 underline">
-              Limpar conversa
-            </button>
           </div>
         )}
       </form>
