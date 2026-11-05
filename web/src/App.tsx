@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Orders from './pages/Orders';
 import Product from './pages/Product';
 import Reservations from './pages/Reservations';
+import Stock from './pages/Stock';
 import type { Role } from './types';
 
 function Guard({ roles, children }: { roles?: Role[]; children: React.ReactElement }) {
@@ -26,6 +27,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Assistant />} />
+        <Route path="/estoque" element={<Stock />} />
         <Route path="/produtos/:id" element={<Product />} />
         <Route path="/pedidos" element={<Orders />} />
         <Route path="/reservas" element={<Reservations />} />

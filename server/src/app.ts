@@ -12,6 +12,7 @@ import { isProduction } from './config.js';
 import { adminRoutes } from './routes/admin.js';
 import { coreRoutes } from './routes/core.js';
 import { operationsRoutes } from './routes/operations.js';
+import { stockRoutes } from './routes/stock.js';
 
 /** Cabeçalho exigido em requisições que alteram estado (defesa adicional contra CSRF). */
 export const CSRF_HEADER = 'x-requested-with';
@@ -70,6 +71,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   app.get('/api/health', async () => ({ ok: true }));
   await app.register(coreRoutes);
   await app.register(operationsRoutes);
+  await app.register(stockRoutes);
   await app.register(adminRoutes);
 
   // Em produção, serve o frontend compilado (web/dist) com fallback de SPA.

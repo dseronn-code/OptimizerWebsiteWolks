@@ -2,6 +2,7 @@ import { getBlingClient } from '../bling/clientFactory.js';
 import { pool } from '../db/pool.js';
 import { scanAlerts } from '../alerts/alertService.js';
 import { expireReservations } from '../reservations/reservationService.js';
+import { invalidateStockOverview } from '../stock/overview.js';
 import { invalidateProductCache } from '../stock/productSearch.js';
 import { enqueue, type JobHandler } from './jobs.js';
 import {
@@ -62,6 +63,7 @@ export const jobHandlers: Record<string, JobHandler> = {
   async sync_incremental(p: { triggeredBy?: string }) {
     await runIncrementalSync(await getBlingClient(), p.triggeredBy ?? 'agendado');
     invalidateProductCache();
+    invalidateStockOverview();
   },
   /** Releitura completa do catálogo (preenche campos novos, como tipo do item e tipo de estoque dos kits). */
   async sync_products_full(p: { marker?: string }) {

@@ -17,6 +17,7 @@ import { clearSettingsCache, updateSettings } from '../src/lib/settings.js';
 import { approveReservation, createReservation, ReservationError } from '../src/reservations/reservationService.js';
 import { getAvailability } from '../src/stock/stockService.js';
 import { purgeDemoData } from '../src/demo/purge.js';
+import { invalidateStockOverview } from '../src/stock/overview.js';
 import { runDueJobs } from '../src/sync/jobs.js';
 import { jobHandlers, processWebhookEvent } from '../src/sync/processors.js';
 import { runFullSync, syncAllBalances, syncProducts, syncSalesOrders, upsertSalesOrder } from '../src/sync/syncService.js';
@@ -78,6 +79,7 @@ beforeEach(async () => {
     stock_balances, product_components, products, deposits, situations, situation_rules, sync_state, sync_runs, jobs,
     webhook_events, alerts, audit_log, query_history, sessions, users, settings, order_overrides, item_fulfillments, email_verifications, mfa_challenges CASCADE`);
   clearSettingsCache();
+  invalidateStockOverview();
   await updateSettings({ appMode: 'demo', reservations: { autoApproveSellers: true } as any, security: { mfaRequiredFor: [] } }, null);
   fake = new FakeBlingClient(freshState());
   setBlingClientOverride(fake);
@@ -570,6 +572,35 @@ describe('painel de gestão: contagens', () => {
     expect(d.divergent.map((r: any) => r.sku)).toEqual(['NEG-1']);
     expect(d.atRisk).toHaveLength(0);
     expect(d.oldestCommitted[0]).toMatchObject({ number: 60, customer_name: 'Antigo' });
+    await app.close();
+  });
+});
+
+describe('tela Estoque (todos os produtos)', () => {
+  const H = { 'x-requested-with': 'bling-stock-ai', 'content-type': 'application/json' };
+  it('lista todos os produtos com comprometido e disponível, filtra, busca e exporta CSV', async () => {
+    fake.state.products.push({ id: 5301, nome: 'Cabo Parado', codigo: 'CABO-1', formato: 'S', situacao: 'A', tipo: 'P' } as any);
+    fake.state.balances.push({ productId: 5301, depositId: DEP_A, physical: 40, virtual: 40 });
+    fake.state.salesOrders.push({ id: 970, numero: 70, data: new Date().toISOString().slice(0, 10), contato: { id: 1, nome: 'X' }, situacao: { id: SIT_CONFIRMADO }, itens: [{ id: 70, quantidade: 3, produto: { id: PRODUCT } }] });
+    await syncProducts(fake);
+    await syncAllBalances(fake);
+    await syncSalesOrders(fake, { full: true });
+    invalidateStockOverview();
+    const app = await buildApp({ logger: false });
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'vend1', password: 'SenhaForte123' } });
+    const cookie = `bsa_session=${login.cookies.find((c) => c.name === 'bsa_session')!.value}`;
+    const all = (await app.inject({ method: 'GET', url: '/api/stock', headers: { cookie } })).json();
+    expect(all.totals.products).toBe(2);
+    const tst = all.rows.find((r: any) => r.sku === 'TST-1');
+    expect(tst).toMatchObject({ physical: 10, committed: 3, availableForSale: 7, status: 'CONFIRMED' });
+    expect(all.rows.find((r: any) => r.sku === 'CABO-1')).toMatchObject({ physical: 40, committed: 0, availableForSale: 40 });
+    const committed = (await app.inject({ method: 'GET', url: '/api/stock?filter=committed', headers: { cookie } })).json();
+    expect(committed.rows.map((r: any) => r.sku)).toEqual(['TST-1']);
+    const search = (await app.inject({ method: 'GET', url: '/api/stock?q=cabo', headers: { cookie } })).json();
+    expect(search.rows.map((r: any) => r.sku)).toEqual(['CABO-1']);
+    const csv = await app.inject({ method: 'GET', url: '/api/stock?format=csv&sort=availableForSale&dir=desc', headers: { cookie } });
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.body.split('\n')[1]).toContain('CABO-1');
     await app.close();
   });
 });
