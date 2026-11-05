@@ -581,6 +581,8 @@ describe('tela Estoque (todos os produtos)', () => {
   it('lista todos os produtos com comprometido e disponível, filtra, busca e exporta CSV', async () => {
     fake.state.products.push({ id: 5301, nome: 'Cabo Parado', codigo: 'CABO-1', formato: 'S', situacao: 'A', tipo: 'P' } as any);
     fake.state.balances.push({ productId: 5301, depositId: DEP_A, physical: 40, virtual: 40 });
+    fake.state.products.push({ id: 5302, nome: 'Negativo', codigo: 'NEG-2', formato: 'S', situacao: 'A', tipo: 'P' } as any);
+    fake.state.balances.push({ productId: 5302, depositId: DEP_A, physical: -500, virtual: -500 });
     fake.state.salesOrders.push({ id: 970, numero: 70, data: new Date().toISOString().slice(0, 10), contato: { id: 1, nome: 'X' }, situacao: { id: SIT_CONFIRMADO }, itens: [{ id: 70, quantidade: 3, produto: { id: PRODUCT } }] });
     await syncProducts(fake);
     await syncAllBalances(fake);
@@ -590,7 +592,10 @@ describe('tela Estoque (todos os produtos)', () => {
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'vend1', password: 'SenhaForte123' } });
     const cookie = `bsa_session=${login.cookies.find((c) => c.name === 'bsa_session')!.value}`;
     const all = (await app.inject({ method: 'GET', url: '/api/stock', headers: { cookie } })).json();
-    expect(all.totals.products).toBe(2);
+    expect(all.totals.products).toBe(3);
+    expect(all.totals).toMatchObject({ physical: 50, negative: -500, negativeProducts: 1, availableForSale: 47 });
+    // disponível nunca passa do físico positivo
+    expect(all.totals.availableForSale).toBeLessThanOrEqual(all.totals.physical);
     const tst = all.rows.find((r: any) => r.sku === 'TST-1');
     expect(tst).toMatchObject({ physical: 10, committed: 3, availableForSale: 7, status: 'CONFIRMED' });
     expect(all.rows.find((r: any) => r.sku === 'CABO-1')).toMatchObject({ physical: 40, committed: 0, availableForSale: 40 });

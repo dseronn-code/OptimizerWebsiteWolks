@@ -20,7 +20,7 @@ interface Row {
 }
 
 interface Resp {
-  totals: { products: number; physical: number; committed: number; availableForSale: number };
+  totals: { products: number; physical: number; negative: number; negativeProducts: number; committed: number; availableForSale: number; virtualKits: number };
   counts: Record<string, number>;
   page: number;
   pageSize: number;
@@ -150,10 +150,18 @@ export default function Stock() {
       {data && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Tile label="Produtos" value={num(data.totals.products)} tone="muted" />
-          <Tile label="Físico (Bling)" value={num(data.totals.physical)} tone="muted" />
+          <Tile label="Físico em estoque (Bling)" value={num(data.totals.physical)} tone="muted" />
           <Tile label="Comprometido (pedidos e reservas)" value={num(data.totals.committed)} />
           <Tile label="Disponível para venda" value={num(data.totals.availableForSale)} tone="good" />
         </div>
+      )}
+
+      {data && (data.totals.negativeProducts > 0 || data.totals.virtualKits > 0) && (
+        <p className="text-xs text-slate-500">
+          Disponível = físico − comprometido, produto a produto.
+          {data.totals.negativeProducts > 0 && <> {num(data.totals.negativeProducts)} produto(s) estão com saldo negativo no Bling (somando {num(data.totals.negative)} un.): eles contam como 0 disponível e não entram no físico acima.</>}
+          {data.totals.virtualKits > 0 && <> {num(data.totals.virtualKits)} kit(s) calculados pelos componentes não entram nos totais, para as mesmas peças não serem contadas duas vezes.</>}
+        </p>
       )}
 
       <ErrorMsg error={error} />

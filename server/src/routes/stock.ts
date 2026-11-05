@@ -81,14 +81,26 @@ export async function stockRoutes(app: FastifyInstance) {
         .send('﻿' + [header.join(';'), ...lines].join('\n'));
     }
 
+    // Totais em unidades: kits virtuais ficam fora (as peças já estão nos componentes) e saldos
+    // negativos são mostrados à parte — assim "disponível" nunca passa do estoque positivo.
     const totals = rows.reduce(
-      (t, r) => ({
-        products: t.products + 1,
-        physical: t.physical + (r.physical ?? 0),
-        committed: t.committed + r.committed,
-        availableForSale: t.availableForSale + r.availableForSale,
-      }),
-      { products: 0, physical: 0, committed: 0, availableForSale: 0 },
+      (t, r) => {
+        t.products += 1;
+        if (r.virtualKit) {
+          t.virtualKits += 1;
+          return t;
+        }
+        const phys = r.physical ?? 0;
+        if (phys >= 0) t.physical += phys;
+        else {
+          t.negative += phys;
+          t.negativeProducts += 1;
+        }
+        t.committed += r.committed;
+        t.availableForSale += r.availableForSale;
+        return t;
+      },
+      { products: 0, physical: 0, negative: 0, negativeProducts: 0, committed: 0, availableForSale: 0, virtualKits: 0 },
     );
     const counts = Object.fromEntries(FILTERS.map((f) => [f, all.filter((r) => matches(r, f)).length]));
     const start = (q.page - 1) * q.pageSize;

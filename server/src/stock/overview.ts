@@ -26,6 +26,8 @@ export interface StockRow {
   incoming: number;
   status: 'CONFIRMED' | 'UNCONFIRMED';
   issues: string[];
+  /** kit calculado pelos componentes: fica fora dos totais (as unidades já estão nos componentes) */
+  virtualKit: boolean;
   fetchedAt: string | null;
 }
 
@@ -109,6 +111,7 @@ export async function stockOverview(depositId: number | null): Promise<StockRow[
         // primeiro o que impede a confirmação; depois os demais avisos
         issues: [...new Set([...r.issues.filter((i) => i.blocksConfirmation), ...r.issues.filter((i) => !i.blocksConfirmation && i.severity !== 'info')].map((i) => i.code))],
         fetchedAt: dep?.fetchedAt ?? r.dataAsOf,
+        virtualKit: Boolean((r as { kit?: unknown }).kit),
       });
       continue;
     }
@@ -128,6 +131,7 @@ export async function stockOverview(depositId: number | null): Promise<StockRow[
       status: issues.length ? 'UNCONFIRMED' : 'CONFIRMED',
       issues,
       fetchedAt: b.fetched_at ? b.fetched_at.toISOString() : null,
+      virtualKit: false,
     });
   }
   cache.set(key, { at: Date.now(), rows });
