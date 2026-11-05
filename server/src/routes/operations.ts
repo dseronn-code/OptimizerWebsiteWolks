@@ -254,6 +254,8 @@ export async function operationsRoutes(app: FastifyInstance) {
     );
     let confirmed = 0;
     let unconfirmed = 0;
+    // Conferência com o Bling: saldo físico − saldo virtual = quanto o Bling considera reservado em pedidos.
+    const virtualCheck = { checked: 0, matching: 0, blingNoReservation: 0, different: [] as unknown[] };
     const atRisk: unknown[] = [];
     const divergent: unknown[] = [];
     for (const { id } of busy) {
@@ -263,7 +265,18 @@ export async function operationsRoutes(app: FastifyInstance) {
       const dep = q.depositId ? r.byDeposit.find((d) => d.depositId === q.depositId) : null;
       if (r.status === 'CONFIRMED') confirmed++;
       else unconfirmed++;
-      const row = { id, sku: r.product.sku, name: r.product.name, physical: dep ? dep.physical : r.physicalTotal, available: dep ? dep.available : r.available, availableForSale: dep ? dep.availableForSale : r.availableForSale, status: r.status, issues: r.issues.map((i) => i.code) };
+      // pedidos que o sistema está descontando agora (ainda não baixados no Bling)
+      const openOrders = r.lines.filter((l) => l.kind === 'ORDER' && l.subtracted > 0).reduce((t, l) => t + l.subtracted, 0);
+      const virtual = dep ? dep.virtual : r.virtualTotal;
+      const physical = dep ? dep.physical : r.physicalTotal;
+      const blingReserved = physical !== null && virtual !== null ? Math.round((physical - virtual) * 10000) / 10000 : null;
+      if (openOrders > 0 && blingReserved !== null) {
+        virtualCheck.checked++;
+        if (Math.abs(blingReserved - openOrders) < 0.001) virtualCheck.matching++;
+        else if (Math.abs(blingReserved) < 0.001) virtualCheck.blingNoReservation++;
+        else virtualCheck.different.push({ sku: r.product.sku, physical, virtual, blingReserved, openOrders });
+      }
+      const row = { id, sku: r.product.sku, name: r.product.name, physical, virtual, openOrders, available: dep ? dep.available : r.available, availableForSale: dep ? dep.availableForSale : r.availableForSale, status: r.status, issues: r.issues.map((i) => i.code) };
       // risco de venda acima do saldo = compromissos maiores que o estoque (saldo negativo sozinho é divergência)
       if (r.issues.some((i) => i.code === 'OVERCOMMITTED')) atRisk.push(row);
       if (r.issues.some((i) => ['NEGATIVE_BALANCE', 'OVERCOMMITTED', 'POSSIBLE_DUPLICATE', 'UNMAPPED_SITUATION', 'UNKNOWN_STOCK_EFFECT'].includes(i.code))) divergent.push(row);
@@ -336,6 +349,7 @@ export async function operationsRoutes(app: FastifyInstance) {
       reservations: reservations.rows[0],
       committedBySeller: { reservations: bySeller.rows, orders: ordersBySeller.rows },
       oldestCommitted: oldestCommitted.rows,
+      virtualCheck: { ...virtualCheck, different: virtualCheck.different.slice(0, 20) },
       syncFailures: syncFailures.rows,
       alerts: alerts.rows,
       recentReservationChanges: recentReservationChanges.rows,

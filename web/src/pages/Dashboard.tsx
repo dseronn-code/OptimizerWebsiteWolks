@@ -5,7 +5,7 @@ import { api, qs } from '../api';
 import { ErrorMsg, PageHeader, Table, Tile } from '../components/ui';
 import { CATEGORY_LABEL, date, dateTime, num, RESERVATION_STATUS } from '../format';
 
-interface Row { id: number; sku: string | null; name: string; physical: number | null; available: number | null; availableForSale: number; status: string; issues: string[] }
+interface Row { id: number; sku: string | null; name: string; physical: number | null; virtual: number | null; openOrders: number; available: number | null; availableForSale: number; status: string; issues: string[] }
 interface Dash {
   products: { total: number; confirmed: number; unconfirmed: number };
   atRisk: Row[];
@@ -15,6 +15,7 @@ interface Dash {
   committedBySeller: { reservations: { seller: string; units: number; reservations: number }[]; orders: { seller: string; units: number; orders: number }[] };
   syncFailures: { kind: string; started_at: string; error: string }[];
   alerts: { severity: string; n: number }[];
+  virtualCheck: { checked: number; matching: number; blingNoReservation: number; different: { sku: string; physical: number; virtual: number; blingReserved: number; openOrders: number }[] };
   oldestCommitted: { id: number; number: number | null; order_date: string | null; customer_name: string | null; situation: string | null; items: number; units: number; age_days: number | null }[];
   recentReservationChanges: { at: string; action: string; from_status: string | null; to_status: string | null; user_name: string | null; sku: string; quantity: number; customer_name: string }[];
 }
@@ -76,6 +77,8 @@ export default function Dashboard() {
             <Tile label="Alertas de atenção" value={alertCount('warning')} tone={alertCount('warning') ? 'warn' : 'default'} />
             <Tile label="Falhas de sincronização (7d)" value={data.syncFailures.length} tone={data.syncFailures.length ? 'bad' : 'default'} />
           </div>
+
+          {data.virtualCheck.checked > 0 && <VirtualCheck check={data.virtualCheck} />}
 
           <ProductTable title="Produtos com pedidos acima do estoque" rows={data.atRisk} />
 
@@ -171,17 +174,62 @@ function ProductTable({ title, rows }: { title: string; rows: Row[] }) {
   return (
     <section className="card overflow-hidden">
       <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">{title}</h2>
-      <Table columns={['Produto', 'Físico', 'Saldo calculado', 'Disponível', 'Ocorrências']}>
+      <Table columns={['Produto', 'Físico', 'Virtual (Bling)', 'Pedidos em aberto', 'Saldo calculado', 'Disponível', 'Ocorrências']}>
         {rows.map((r) => (
           <tr key={r.id}>
             <td className="td"><Link className="text-brand-600 hover:underline" to={`/produtos/${r.id}`}>{r.sku}</Link> <span className="text-slate-500">{r.name}</span></td>
             <td className="td tabular-nums">{num(r.physical)}</td>
+            <td className="td tabular-nums text-slate-500">{num(r.virtual)}</td>
+            <td className="td tabular-nums">{r.openOrders ? num(r.openOrders) : '—'}</td>
             <td className={`td tabular-nums ${r.available !== null && r.available < 0 ? 'font-semibold text-rose-600' : ''}`}>{num(r.available)}</td>
             <td className="td tabular-nums">{num(r.availableForSale)}</td>
             <td className="td text-xs">{[...new Set(r.issues)].filter((c) => ISSUE_LABEL[c]).map((c) => ISSUE_LABEL[c]).join(' · ')}</td>
           </tr>
         ))}
       </Table>
+    </section>
+  );
+}
+
+/**
+ * Conferência com o Bling: físico − virtual = o que o Bling considera reservado em pedidos.
+ * Se bate com os pedidos que o sistema desconta, as regras de situação estão coerentes com o Bling.
+ */
+function VirtualCheck({ check }: { check: Dash['virtualCheck'] }) {
+  const ok = check.matching === check.checked;
+  const noRes = check.blingNoReservation;
+  return (
+    <section className={`card p-4 text-sm ${ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
+      <h2 className="font-semibold text-slate-900">Conferência com o saldo virtual do Bling</h2>
+      <p className="mt-1 text-slate-700">
+        De <b>{check.checked}</b> produto(s) com pedidos em aberto, <b>{check.matching}</b> batem exatamente com o que o Bling reserva
+        (físico − virtual = pedidos em aberto).
+        {noRes > 0 && <> Em <b>{noRes}</b>, o Bling <b>não</b> reserva nada (virtual = físico).</>}
+      </p>
+      {ok ? (
+        <p className="mt-1 text-emerald-800">As regras de situação estão coerentes com o Bling: nenhum pedido está sendo descontado duas vezes.</p>
+      ) : (
+        <p className="mt-1 text-amber-900">
+          {noRes > 0
+            ? 'Quando o Bling não reserva o pedido, pode ser que a baixa já tenha sido feita na inclusão do pedido, ou que a conta não use reserva de estoque. Confira um desses pedidos no Bling antes de ajustar a regra.'
+            : 'Há diferenças entre o que o Bling reserva e o que o sistema desconta. Veja os produtos abaixo.'}
+        </p>
+      )}
+      {check.different.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <Table columns={['Produto', 'Físico', 'Virtual', 'Bling reserva', 'Sistema desconta']}>
+            {check.different.map((d) => (
+              <tr key={d.sku}>
+                <td className="td">{d.sku}</td>
+                <td className="td tabular-nums">{num(d.physical)}</td>
+                <td className="td tabular-nums">{num(d.virtual)}</td>
+                <td className="td tabular-nums">{num(d.blingReserved)}</td>
+                <td className="td tabular-nums">{num(d.openOrders)}</td>
+              </tr>
+            ))}
+          </Table>
+        </div>
+      )}
     </section>
   );
 }
