@@ -166,7 +166,7 @@ export async function listProductIdsWithActivity(limit = 500): Promise<number[]>
   const { rows } = await pool.query<{ id: number }>(
     `SELECT DISTINCT p.id FROM products p
      LEFT JOIN stock_balances b ON b.product_id = p.id
-     WHERE p.active AND p.format <> 'V' AND b.product_id IS NOT NULL
+     WHERE p.active AND p.format <> 'V' AND p.kind = 'P' AND b.product_id IS NOT NULL
      ORDER BY p.id LIMIT $1`,
     [limit],
   );

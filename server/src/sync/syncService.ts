@@ -101,13 +101,13 @@ export async function syncSituations(client: BlingClient, triggeredBy = 'system'
 async function upsertProduct(db: Db, p: BlingProductSummary & { unidade?: string | null; gtin?: string | null }, source: string) {
   const search = normalize(`${p.codigo ?? ''} ${p.nome} ${p.gtin ?? ''}`);
   await db.query(
-    `INSERT INTO products (id, parent_id, sku, name, gtin, unit, format, active, search_text, source, synced_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+    `INSERT INTO products (id, parent_id, sku, name, gtin, unit, format, active, search_text, source, kind, synced_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
      ON CONFLICT (id) DO UPDATE SET parent_id = EXCLUDED.parent_id, sku = EXCLUDED.sku, name = EXCLUDED.name,
        gtin = COALESCE(EXCLUDED.gtin, products.gtin), unit = COALESCE(EXCLUDED.unit, products.unit),
        format = EXCLUDED.format, active = EXCLUDED.active, search_text = EXCLUDED.search_text,
-       source = EXCLUDED.source, synced_at = now()`,
-    [p.id, p.idProdutoPai || null, p.codigo ?? null, p.nome, p.gtin ?? null, p.unidade ?? null, p.formato ?? 'S', p.situacao !== 'I', search, source],
+       source = EXCLUDED.source, kind = EXCLUDED.kind, synced_at = now()`,
+    [p.id, p.idProdutoPai || null, p.codigo ?? null, p.nome, p.gtin ?? null, p.unidade ?? null, p.formato ?? 'S', p.situacao !== 'I', search, source, p.tipo === 'S' || p.tipo === 'N' ? p.tipo : 'P'],
   );
 }
 
@@ -188,7 +188,7 @@ export async function refreshBalances(client: BlingClient, productIds: number[])
 
 export async function syncAllBalances(client: BlingClient, triggeredBy = 'system') {
   return recordAttempt('balances', triggeredBy, async () => {
-    const { rows } = await pool.query<{ id: number }>("SELECT id FROM products WHERE active AND format <> 'V' ORDER BY id");
+    const { rows } = await pool.query<{ id: number }>("SELECT id FROM products WHERE active AND format <> 'V' AND kind = 'P' ORDER BY id");
     const items = await refreshBalances(client, rows.map((r) => r.id));
     return { items };
   });

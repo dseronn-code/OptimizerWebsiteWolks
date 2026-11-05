@@ -63,6 +63,17 @@ export const jobHandlers: Record<string, JobHandler> = {
     await runIncrementalSync(await getBlingClient(), p.triggeredBy ?? 'agendado');
     invalidateProductCache();
   },
+  /** Releitura completa do catálogo (preenche campos novos, como tipo do item e tipo de estoque dos kits). */
+  async sync_products_full(p: { marker?: string }) {
+    await syncProducts(await getBlingClient(), {}, 'atualizacao');
+    if (p.marker) {
+      await pool.query(
+        'INSERT INTO sync_state (resource, last_success_at) VALUES ($1, now()) ON CONFLICT (resource) DO UPDATE SET last_success_at = now()',
+        [p.marker],
+      );
+    }
+    invalidateProductCache();
+  },
   async sync_products_incremental() {
     const since = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     await syncProducts(await getBlingClient(), { since }, 'webhook');

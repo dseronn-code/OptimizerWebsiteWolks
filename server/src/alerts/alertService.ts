@@ -57,7 +57,10 @@ async function productIdsToScan(): Promise<number[]> {
      UNION SELECT product_id FROM stock_blocks WHERE active
      UNION SELECT product_id FROM stock_balances WHERE physical < 0`,
   );
-  return rows.map((r) => r.id).filter((id) => id !== null);
+  const ids = rows.map((r) => r.id).filter((id) => id !== null);
+  // serviços (mão de obra etc.) não têm estoque
+  const { rows: products } = await pool.query<{ id: number }>("SELECT id FROM products WHERE id = ANY($1) AND kind = 'P'", [ids]);
+  return products.map((p) => p.id);
 }
 
 /** Varredura completa: gera/atualiza alertas e resolve os que deixaram de existir. */

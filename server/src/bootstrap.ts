@@ -2,6 +2,7 @@ import { createUser } from './auth/authService.js';
 import { config, isProduction } from './config.js';
 import { pool } from './db/pool.js';
 import { purgeDemoData } from './demo/purge.js';
+import { enqueue } from './sync/jobs.js';
 import { getSettings } from './lib/settings.js';
 
 const DEMO_USERNAMES = ['admin', 'gestor', 'ana', 'bruno'];
@@ -25,6 +26,14 @@ export async function bootstrap(log: (msg: string) => void): Promise<void> {
   }
   // Em modo Bling real, garante que nenhum dado fictício da demonstração permaneça no banco.
   if ((await getSettings()).appMode === 'live') {
+    // Uma releitura do catálogo após atualizações que adicionam campos de produto (tipo do item, kits).
+    const marker = 'products_backfill_v2';
+    const done = await pool.query('SELECT 1 FROM sync_state WHERE resource = $1', [marker]);
+    const connected = await pool.query("SELECT 1 FROM bling_connection WHERE status = 'connected'");
+    if (!done.rowCount && connected.rowCount) {
+      await enqueue('sync_products_full', { marker }, { dedupeKey: 'sync_products_full', maxAttempts: 3 });
+      log('releitura do catálogo agendada');
+    }
     const purged = await purgeDemoData();
     if (purged.removedProducts) log(`dados de demonstração removidos (${purged.removedProducts} produtos fictícios)`);
     // Usuários de demonstração usam senha compartilhada: são desativados no uso real,

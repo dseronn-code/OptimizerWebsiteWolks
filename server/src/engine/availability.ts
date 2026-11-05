@@ -476,7 +476,7 @@ export function calculateAvailability(input: EngineInput): AvailabilityResult {
   if (negativeDeposits.length > 0) {
     issues.push({
       code: 'NEGATIVE_BALANCE',
-      severity: 'critical',
+      severity: 'warning',
       blocksConfirmation: true,
       message: `Saldo físico negativo em: ${negativeDeposits.map((b) => `${b.depositName} (${b.physical})`).join(', ')}. Há divergência de estoque.`,
     });

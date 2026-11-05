@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
 import { ErrorMsg, PageHeader, Table, Tile } from '../components/ui';
-import { CATEGORY_LABEL, dateTime, num, RESERVATION_STATUS } from '../format';
+import { CATEGORY_LABEL, date, dateTime, num, RESERVATION_STATUS } from '../format';
 
 interface Row { id: number; sku: string | null; name: string; physical: number | null; available: number | null; availableForSale: number; status: string; issues: string[] }
 interface Dash {
@@ -15,6 +15,7 @@ interface Dash {
   committedBySeller: { reservations: { seller: string; units: number; reservations: number }[]; orders: { seller: string; units: number; orders: number }[] };
   syncFailures: { kind: string; started_at: string; error: string }[];
   alerts: { severity: string; n: number }[];
+  oldestCommitted: { id: number; number: number | null; order_date: string | null; customer_name: string | null; situation: string | null; items: number; units: number; age_days: number | null }[];
   recentReservationChanges: { at: string; action: string; from_status: string | null; to_status: string | null; user_name: string | null; sku: string; quantity: number; customer_name: string }[];
 }
 
@@ -66,7 +67,7 @@ export default function Dashboard() {
             <Tile label="Disponibilidade confirmada" value={`${data.products.confirmed} / ${data.products.total}`} tone="good" />
             <Tile label="Não confirmada" value={data.products.unconfirmed} tone={data.products.unconfirmed ? 'warn' : 'default'} />
             <Tile label="Com divergência" value={data.divergent.length} tone={data.divergent.length ? 'bad' : 'default'} />
-            <Tile label="Risco de venda acima do saldo" value={data.atRisk.length} tone={data.atRisk.length ? 'bad' : 'default'} />
+            <Tile label="Pedidos acima do estoque" value={data.atRisk.length} tone={data.atRisk.length ? 'bad' : 'default'} hint="Produtos em que os pedidos em aberto somam mais do que o estoque" />
             <Tile label="Pedidos pagos/confirmados" value={`${byCategory('COMMITTED').orders} (${num(byCategory('COMMITTED').units)} un)`} />
             <Tile label="Pré-pedidos com reserva" value={`${byCategory('PRE_ORDER_RESERVED').orders} (${num(byCategory('PRE_ORDER_RESERVED').units)} un)`} />
             <Tile label="Reservas ativas / vencendo" value={`${data.reservations.active} / ${data.reservations.expiring}`} tone={data.reservations.expiring ? 'warn' : 'default'} />
@@ -76,8 +77,31 @@ export default function Dashboard() {
             <Tile label="Falhas de sincronização (7d)" value={data.syncFailures.length} tone={data.syncFailures.length ? 'bad' : 'default'} />
           </div>
 
+          <ProductTable title="Produtos com pedidos acima do estoque" rows={data.atRisk} />
+
+          {data.oldestCommitted.length > 0 && (
+            <section className="card overflow-hidden">
+              <div className="border-b border-slate-100 px-4 py-2">
+                <h2 className="text-sm font-semibold">Pedidos em aberto mais antigos (prendem estoque)</h2>
+                <p className="text-xs text-slate-500">Se algum já foi entregue ou desistido, atualize a situação no Bling (Atendido ou Cancelado) para liberar o estoque.</p>
+              </div>
+              <Table columns={['Pedido', 'Data', 'Há', 'Cliente', 'Situação', 'Itens', 'Unidades']}>
+                {data.oldestCommitted.map((o) => (
+                  <tr key={o.id} className={(o.age_days ?? 0) > 30 ? 'bg-amber-50/60' : ''}>
+                    <td className="td font-medium">{o.number ?? o.id}</td>
+                    <td className="td text-xs">{date(o.order_date)}</td>
+                    <td className={`td text-xs ${(o.age_days ?? 0) > 30 ? 'font-semibold text-amber-800' : ''}`}>{o.age_days ?? '—'} dias</td>
+                    <td className="td">{o.customer_name ?? '—'}</td>
+                    <td className="td text-xs">{o.situation ?? '—'}</td>
+                    <td className="td tabular-nums">{o.items}</td>
+                    <td className="td tabular-nums">{num(Number(o.units))}</td>
+                  </tr>
+                ))}
+              </Table>
+            </section>
+          )}
+
           <ProductTable title="Produtos com divergências" rows={data.divergent} />
-          <ProductTable title="Produtos com risco de venda acima do saldo" rows={data.atRisk} />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="card overflow-hidden">
@@ -128,6 +152,20 @@ export default function Dashboard() {
   );
 }
 
+const ISSUE_LABEL: Record<string, string> = {
+  NEGATIVE_BALANCE: 'Saldo negativo no Bling',
+  OVERCOMMITTED: 'Pedidos acima do estoque',
+  POSSIBLE_DUPLICATE: 'Possível reserva duplicada',
+  UNMAPPED_SITUATION: 'Situação sem regra',
+  UNKNOWN_STOCK_EFFECT: 'Baixa de estoque desconhecida',
+  STALE_BALANCE: 'Saldo desatualizado',
+  SYNC_FAILED: 'Falha de sincronização',
+  NO_BALANCE: 'Sem saldo sincronizado',
+  EXPIRED_RESERVATION: 'Reserva vencida',
+  CANCELLED_WITH_ACTIVE_RESERVATION: 'Cancelado com reserva ativa',
+  PARTIAL_DELIVERY_NOT_POSTED: 'Entrega sem baixa',
+};
+
 function ProductTable({ title, rows }: { title: string; rows: Row[] }) {
   if (rows.length === 0) return null;
   return (
@@ -140,7 +178,7 @@ function ProductTable({ title, rows }: { title: string; rows: Row[] }) {
             <td className="td tabular-nums">{num(r.physical)}</td>
             <td className={`td tabular-nums ${r.available !== null && r.available < 0 ? 'font-semibold text-rose-600' : ''}`}>{num(r.available)}</td>
             <td className="td tabular-nums">{num(r.availableForSale)}</td>
-            <td className="td text-xs">{r.issues.join(', ')}</td>
+            <td className="td text-xs">{[...new Set(r.issues)].filter((c) => ISSUE_LABEL[c]).map((c) => ISSUE_LABEL[c]).join(' · ')}</td>
           </tr>
         ))}
       </Table>

@@ -235,7 +235,7 @@ export async function operationsRoutes(app: FastifyInstance) {
     // Produtos "com movimento" (pedidos em aberto, reservas, bloqueios, saldo zero/negativo, kits) passam
     // pelo motor completo; os demais só dependem da atualidade do saldo — assim o painel cobre o catálogo
     // inteiro sem recalcular milhares de produtos parados.
-    const filterSql = `p.active AND p.format <> 'V' AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
+    const filterSql = `p.active AND p.format <> 'V' AND p.kind = 'P' AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
       AND EXISTS (SELECT 1 FROM stock_balances b JOIN deposits d ON d.id = b.deposit_id
                   WHERE b.product_id = p.id AND NOT d.ignore_balance AND ($2::bigint IS NULL OR b.deposit_id = $2))`;
     const params = [q.q ?? null, q.depositId ?? null];
@@ -264,7 +264,8 @@ export async function operationsRoutes(app: FastifyInstance) {
       if (r.status === 'CONFIRMED') confirmed++;
       else unconfirmed++;
       const row = { id, sku: r.product.sku, name: r.product.name, physical: dep ? dep.physical : r.physicalTotal, available: dep ? dep.available : r.available, availableForSale: dep ? dep.availableForSale : r.availableForSale, status: r.status, issues: r.issues.map((i) => i.code) };
-      if ((row.available ?? 0) < 0 || r.issues.some((i) => i.code === 'OVERCOMMITTED')) atRisk.push(row);
+      // risco de venda acima do saldo = compromissos maiores que o estoque (saldo negativo sozinho é divergência)
+      if (r.issues.some((i) => i.code === 'OVERCOMMITTED')) atRisk.push(row);
       if (r.issues.some((i) => ['NEGATIVE_BALANCE', 'OVERCOMMITTED', 'POSSIBLE_DUPLICATE', 'UNMAPPED_SITUATION', 'UNKNOWN_STOCK_EFFECT'].includes(i.code))) divergent.push(row);
     }
     const busyIds = busy.map((b) => b.id);
@@ -310,6 +311,14 @@ export async function operationsRoutes(app: FastifyInstance) {
        WHERE NOT o.deleted AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED')
        GROUP BY 1 ORDER BY units DESC`,
     );
+    const oldestCommitted = await pool.query(
+      `SELECT o.id, o.number, o.order_date, o.customer_name, s.name AS situation,
+              COUNT(i.id)::int AS items, SUM(i.quantity) AS units, (current_date - o.order_date)::int AS age_days
+       FROM sales_orders o JOIN sales_order_items i ON i.order_id = o.id LEFT JOIN situations s ON s.id = o.situation_id
+       LEFT JOIN situation_rules r1 ON r1.situation_id = o.situation_id LEFT JOIN situation_rules r2 ON r2.situation_id = s.inherited_id
+       WHERE NOT o.deleted AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'UNMAPPED')
+       GROUP BY o.id, s.name ORDER BY o.order_date NULLS FIRST, o.id LIMIT 20`,
+    );
     const syncFailures = await pool.query(
       "SELECT kind, started_at, error FROM sync_runs WHERE status = 'error' AND started_at > now() - interval '7 days' ORDER BY started_at DESC LIMIT 20",
     );
@@ -326,6 +335,7 @@ export async function operationsRoutes(app: FastifyInstance) {
       orders: orderStats.rows,
       reservations: reservations.rows[0],
       committedBySeller: { reservations: bySeller.rows, orders: ordersBySeller.rows },
+      oldestCommitted: oldestCommitted.rows,
       syncFailures: syncFailures.rows,
       alerts: alerts.rows,
       recentReservationChanges: recentReservationChanges.rows,

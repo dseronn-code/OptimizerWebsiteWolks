@@ -346,7 +346,7 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       const busca = input.busca ? `%${input.busca}%` : null;
       const { rows } = await pool.query<{ id: number }>(
         `SELECT p.id FROM products p
-         WHERE p.active AND p.format <> 'V'
+         WHERE p.active AND p.format <> 'V' AND p.kind = 'P'
            AND (EXISTS (SELECT 1 FROM stock_balances b WHERE b.product_id = p.id) OR p.format = 'E')
            AND ($1::text IS NULL OR p.name ILIKE $1 OR p.sku ILIKE $1)
          ORDER BY p.name LIMIT 500`,

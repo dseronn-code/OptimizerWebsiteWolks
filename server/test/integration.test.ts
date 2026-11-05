@@ -547,3 +547,27 @@ describe('kits (produtos com composição)', () => {
     expect((await getAvailability(PRODUCT))?.availableForSale).toBe(8);
   });
 });
+
+describe('painel de gestão: contagens', () => {
+  const H = { 'x-requested-with': 'bling-stock-ai', 'content-type': 'application/json' };
+  it('saldo negativo é divergência (não risco), serviço não conta e pedidos antigos aparecem', async () => {
+    fake.state.products.push(
+      { id: 5201, nome: 'Produto negativo', codigo: 'NEG-1', formato: 'S', situacao: 'A', tipo: 'P' } as any,
+      { id: 5202, nome: 'Mão de obra', codigo: 'MAOOBRA', formato: 'S', situacao: 'A', tipo: 'S' } as any,
+    );
+    fake.state.balances.push({ productId: 5201, depositId: DEP_A, physical: -3, virtual: -3 }, { productId: 5202, depositId: DEP_A, physical: -18, virtual: -18 });
+    fake.state.salesOrders.push({ id: 960, numero: 60, data: '2026-01-10', contato: { id: 1, nome: 'Antigo' }, situacao: { id: SIT_CONFIRMADO }, itens: [{ id: 60, quantidade: 4, produto: { id: PRODUCT } }] });
+    await syncProducts(fake);
+    await syncAllBalances(fake);
+    await upsertSalesOrder(fake.state.salesOrders[0] as any, new Date(), 'teste', 'demo');
+    const app = await buildApp({ logger: false });
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', headers: H, payload: { username: 'gestor', password: 'SenhaForte123' } });
+    const cookie = `bsa_session=${login.cookies.find((c) => c.name === 'bsa_session')!.value}`;
+    const d = (await app.inject({ method: 'GET', url: '/api/dashboard', headers: { cookie } })).json();
+    expect(d.products.total).toBe(2); // TST-1 e NEG-1; o serviço fica fora
+    expect(d.divergent.map((r: any) => r.sku)).toEqual(['NEG-1']);
+    expect(d.atRisk).toHaveLength(0);
+    expect(d.oldestCommitted[0]).toMatchObject({ number: 60, customer_name: 'Antigo' });
+    await app.close();
+  });
+});
