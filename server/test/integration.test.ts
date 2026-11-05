@@ -18,6 +18,7 @@ import { approveReservation, createReservation, ReservationError } from '../src/
 import { getAvailability } from '../src/stock/stockService.js';
 import { purgeDemoData } from '../src/demo/purge.js';
 import { invalidateStockOverview } from '../src/stock/overview.js';
+import { invalidateProductCache } from '../src/stock/productSearch.js';
 import { runDueJobs } from '../src/sync/jobs.js';
 import { jobHandlers, processWebhookEvent } from '../src/sync/processors.js';
 import { runFullSync, syncAllBalances, syncProducts, syncSalesOrders, upsertSalesOrder } from '../src/sync/syncService.js';
@@ -304,6 +305,24 @@ describe('interpretador local: perguntas gerais', () => {
       expect(r.answer).toContain('TST-1');
       expect(r.toolCalls[0].name).toBe('listar_produtos');
     }
+  });
+
+  it('SKU exato não é ambíguo com outro SKU que começa igual (ex.: OSTT-061860 × OSTT-061860-GLM)', async () => {
+    await pool.query(
+      `INSERT INTO products (id, sku, name, format, kind, search_text) VALUES
+         (880001, 'OSTT-061860', 'Rack Outdoor IP55 18U', 'S', 'P', 'ostt-061860 rack outdoor ip55 18u'),
+         (880002, 'OSTT-061860-GLM', 'Rack Outdoor IP65 18U', 'S', 'P', 'ostt-061860-glm rack outdoor ip65 18u')
+       ON CONFLICT (id) DO NOTHING`,
+    );
+    invalidateProductCache();
+    const { resolveProduct } = await import('../src/ai/tools.js');
+    const ctx = { viewer: seller1, cards: [], lastProductId: null };
+    const r = await resolveProduct('OSTT-061860', ctx);
+    expect('product' in r && r.product.id).toBe(880001);
+    const r2 = await resolveProduct('ostt-061860-glm', ctx);
+    expect('product' in r2 && r2.product.id).toBe(880002);
+    await pool.query('DELETE FROM products WHERE id IN (880001, 880002)');
+    invalidateProductCache();
   });
 
   it('produto inexistente gera orientação em vez de erro', async () => {

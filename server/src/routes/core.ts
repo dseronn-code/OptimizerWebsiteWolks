@@ -187,10 +187,22 @@ export async function coreRoutes(app: FastifyInstance) {
         question: z.string().trim().min(1).max(1000),
         history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(6000) })).max(20).default([]),
         lastProductId: z.number().int().positive().nullable().default(null),
+        /** produto escolhido numa lista de opções: responde direto por ele, sem nova busca por texto */
+        pickProductId: z.number().int().positive().optional(),
       }),
       req.body,
     );
     let result;
+    if (body.pickProductId) {
+      const { interpretLocally } = await import('../ai/localInterpreter.js');
+      const ctx = { viewer: viewerOf(user), cards: [], lastProductId: body.pickProductId };
+      const local = await interpretLocally('quanto temos desse produto', ctx);
+      result = { ...local, cards: ctx.cards, engine: 'local' as const, lastProductId: ctx.lastProductId };
+      await pool.query('INSERT INTO query_history (user_id, question, answer, tools, engine) VALUES ($1, $2, $3, $4, $5)', [
+        user.id, body.question, result.answer, JSON.stringify(result.toolCalls), result.engine,
+      ]);
+      return send(reply, result);
+    }
     try {
       result = await answerQuestion(body.question, body.history, viewerOf(user), body.lastProductId);
     } catch (err) {

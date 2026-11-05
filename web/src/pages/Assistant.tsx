@@ -55,7 +55,7 @@ export default function Assistant() {
     }
   }, [messages, lastProductId]);
 
-  const ask = async (question: string) => {
+  const ask = async (question: string, pickProductId?: number) => {
     const q = question.trim();
     if (!q || busy) return;
     setInput('');
@@ -63,7 +63,7 @@ export default function Assistant() {
     setMessages((m) => [...m, { role: 'user', content: q }]);
     setBusy(true);
     try {
-      const r = await api.post<ChatAnswer>('/api/chat', { question: q, history, lastProductId });
+      const r = await api.post<ChatAnswer>('/api/chat', { question: q, history, lastProductId, ...(pickProductId ? { pickProductId } : {}) });
       setLastProductId(r.lastProductId);
       setMessages((m) => [...m, { role: 'assistant', content: r.answer, cards: r.cards, engine: r.engine, model: r.model, fallbackReason: r.fallbackReason }]);
     } catch (err) {
@@ -108,7 +108,7 @@ export default function Assistant() {
           </div>
         )}
         {messages.map((m, i) => (
-          <MessageView key={i} m={m} onPick={(p) => ask(`${p.sku ?? p.name}`)} />
+          <MessageView key={i} m={m} onPick={(p) => ask(`${p.sku ?? p.name}`, p.id)} />
         ))}
         {busy && (
           <div className="flex items-center gap-2 text-sm text-slate-500">

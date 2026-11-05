@@ -86,7 +86,11 @@ export async function resolveProduct(ref: string, ctx: ToolContext): Promise<Res
   const matches = await searchProducts(trimmed, 6);
   if (matches.length === 0) return { notFound: true };
   const [first, second] = matches;
-  if (first.score >= 0.9 && (!second || first.score - second.score >= 0.08)) return { product: first };
+  // SKU idêntico ao digitado sempre vence (ex.: "OSTT-061860" não é ambíguo com "OSTT-061860-GLM")
+  const exact = matches.filter((m) => m.score >= 1);
+  if (exact.length === 1) return { product: exact[0] };
+  // tolerância: 1 − 0,92 dá 0,0799… em ponto flutuante
+  if (first.score >= 0.9 && (!second || first.score - second.score >= 0.08 - 1e-9)) return { product: first };
   if (matches.length === 1 && first.score >= 0.6) return { product: first };
   return { ambiguous: matches };
 }
