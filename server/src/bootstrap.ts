@@ -1,6 +1,8 @@
 import { createUser } from './auth/authService.js';
 import { config, isProduction } from './config.js';
 import { pool } from './db/pool.js';
+import { purgeDemoData } from './demo/purge.js';
+import { getSettings } from './lib/settings.js';
 
 /**
  * Primeira inicialização (útil em hospedagens sem acesso a terminal):
@@ -19,6 +21,12 @@ export async function bootstrap(log: (msg: string) => void): Promise<void> {
       await seedDemo(log, isProduction ? config.BOOTSTRAP_ADMIN_PASSWORD : undefined);
     }
   }
+  // Em modo Bling real, garante que nenhum dado fictício da demonstração permaneça no banco.
+  if ((await getSettings()).appMode === 'live') {
+    const purged = await purgeDemoData();
+    if (purged.removedProducts) log(`dados de demonstração removidos (${purged.removedProducts} produtos fictícios)`);
+  }
+
   const username = config.BOOTSTRAP_ADMIN_USERNAME?.trim().toLowerCase();
   if (username && config.BOOTSTRAP_ADMIN_PASSWORD) {
     const exists = await pool.query('SELECT 1 FROM users WHERE username = $1', [username]);

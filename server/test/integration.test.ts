@@ -15,6 +15,7 @@ import { pool } from '../src/db/pool.js';
 import { clearSettingsCache, updateSettings } from '../src/lib/settings.js';
 import { approveReservation, createReservation, ReservationError } from '../src/reservations/reservationService.js';
 import { getAvailability } from '../src/stock/stockService.js';
+import { purgeDemoData } from '../src/demo/purge.js';
 import { runDueJobs } from '../src/sync/jobs.js';
 import { jobHandlers, processWebhookEvent } from '../src/sync/processors.js';
 import { runFullSync, syncSalesOrders, upsertSalesOrder } from '../src/sync/syncService.js';
@@ -428,5 +429,22 @@ describe('cadastro com código por e-mail', () => {
     const off = await app.inject({ method: 'POST', url: '/api/auth/signup/start', headers: H, payload: { name: 'Xavier', email: 'x@itcomtech.com.br', password: 'SenhaNova2026' } });
     expect(off.statusCode).toBe(403);
     await app.close();
+  });
+});
+
+describe('passagem para o Bling real', () => {
+  it('apaga os dados fictícios da demonstração e mantém os usuários', async () => {
+    await createReservation({ productId: PRODUCT, quantity: 2, customerName: 'C', reason: 'x' }, manager);
+    const before = await pool.query("SELECT COUNT(*)::int AS n FROM products WHERE source = 'demo'");
+    expect(before.rows[0].n).toBeGreaterThan(0);
+    const r = await purgeDemoData();
+    expect(r.removedProducts).toBe(before.rows[0].n);
+    for (const t of ['products', 'stock_balances', 'sales_orders', 'reservations', 'situations']) {
+      const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM ${t}`);
+      expect(rows[0].n, t).toBe(0);
+    }
+    const users = await pool.query('SELECT COUNT(*)::int AS n FROM users');
+    expect(users.rows[0].n).toBe(3);
+    expect((await purgeDemoData()).removedProducts).toBe(0); // idempotente
   });
 });

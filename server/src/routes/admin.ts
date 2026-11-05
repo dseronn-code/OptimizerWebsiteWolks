@@ -6,6 +6,7 @@ import { HttpError, requireUser, send } from '../auth/guard.js';
 import { connectionStatus, createAuthorizationUrl, disconnect, handleOAuthCallback } from '../bling/oauth.js';
 import { config } from '../config.js';
 import { pool } from '../db/pool.js';
+import { purgeDemoData } from '../demo/purge.js';
 import { parse } from '../lib/http.js';
 import { getSettings, updateSettings } from '../lib/settings.js';
 import { enqueue } from '../sync/jobs.js';
@@ -94,6 +95,11 @@ export async function adminRoutes(app: FastifyInstance) {
   app.put('/api/admin/settings', async (req, reply) => {
     const admin = requireUser(req, ['admin']);
     const body = parse(settingsSchema, req.body);
+    if (body.appMode === 'live') {
+      // ao usar o Bling real, os dados fictícios da demonstração são apagados para não se misturarem
+      const purged = await purgeDemoData();
+      if (purged.removedProducts) await audit({ userId: admin.id, action: 'demo.purged', details: purged, ip: req.ip });
+    }
     const next = await updateSettings(body as never, admin.id);
     await audit({ userId: admin.id, action: 'settings.update', details: body, ip: req.ip });
     return send(reply, { settings: next });
