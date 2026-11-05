@@ -49,7 +49,13 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     },
   });
   await app.register(cookie);
-  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
+  await app.register(rateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: '1 minute',
+    errorResponseBuilder: (_req, ctx) =>
+      Object.assign(new Error(`Muitas solicitações em pouco tempo. Aguarde ${ctx.after.replace('minute', 'minuto').replace('seconds', 'segundos')} e tente novamente.`), { statusCode: ctx.statusCode }),
+  });
 
   app.decorateRequest('user', null);
   app.addHook('onRequest', async (req) => {
@@ -65,7 +71,14 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   app.setErrorHandler((err: FastifyError | HttpError, req, reply) => {
     const status = (err as HttpError).statusCode ?? 500;
     if (status >= 500) req.log.error({ err }, 'erro interno');
-    reply.code(status).send({ error: status >= 500 && isProduction ? 'Erro interno. Tente novamente.' : err.message });
+    // erros do próprio framework (JSON malformado, corpo grande demais…) vêm em inglês: traduz
+    const code = (err as FastifyError).code ?? '';
+    const message =
+      status >= 500 && isProduction ? 'Erro interno. Tente novamente.'
+      : code === 'FST_ERR_CTP_BODY_TOO_LARGE' ? 'Os dados enviados são grandes demais.'
+      : code.startsWith('FST_ERR_CTP') || code === 'FST_ERR_VALIDATION' ? 'Requisição inválida.'
+      : err.message;
+    reply.code(status).send({ error: message });
   });
 
   app.get('/api/health', async () => ({ ok: true }));
@@ -80,6 +93,9 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     await app.register(fastifyStatic, { root: webDist, wildcard: false });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'Rota não encontrada' });
+      // arquivo estático inexistente (ex.: versão antiga em cache pedindo um .js que não existe mais):
+      // responde 404 em vez do index.html, que o navegador rejeitaria como script
+      if (/\.[a-z0-9]{1,8}(\?.*)?$/i.test(req.url)) return reply.code(404).send('Não encontrado');
       return reply.sendFile('index.html');
     });
   }

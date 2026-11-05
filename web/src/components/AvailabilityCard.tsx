@@ -1,6 +1,6 @@
 import { ArrowRight, Clock, PackageCheck, PackageX } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ago, dateTime, num } from '../format';
+import { ago, date, dateTime, num } from '../format';
 import type { Availability, SaleCheck } from '../types';
 import { SeverityIcon, StatusBadge, Tile } from './ui';
 
@@ -52,7 +52,7 @@ export default function AvailabilityCard({ data, sale, compact = false }: { data
 
       {data.incoming.length > 0 && (
         <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-600">
-          Entradas previstas (não contam no disponível): {data.incoming.map((e) => `${num(e.quantity)} em ${e.expectedDate ?? '—'}`).join(' · ')}
+          Entradas previstas (não contam no disponível): {data.incoming.map((e) => `${num(e.quantity)} para ${e.expectedDate ? date(e.expectedDate) : 'data não informada'}`).join(' · ')}
         </div>
       )}
 

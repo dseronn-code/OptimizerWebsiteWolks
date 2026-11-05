@@ -263,7 +263,7 @@ export function calculateAvailability(input: EngineInput): AvailabilityResult {
         severity: 'warning',
         blocksConfirmation: false,
         refId: common.refId,
-        message: `${common.label}: ${c.quantityDelivered} unidade(s) entregue(s) sem baixa no Bling.`,
+        message: `${common.label}: ${c.quantityDelivered} ${c.quantityDelivered === 1 ? 'unidade entregue' : 'unidades entregues'} sem baixa no Bling.`,
       });
     }
     if (uncertain && c.category !== 'UNMAPPED') {
@@ -289,7 +289,7 @@ export function calculateAvailability(input: EngineInput): AvailabilityResult {
     const common = {
       kind: 'RESERVATION' as const,
       refId: `reservation:${r.id}`,
-      label: `Reserva ${r.id.slice(0, 8)}${r.customerName ? ` — ${r.customerName}` : ''}`,
+      label: r.customerName ? `Reserva de ${r.customerName}` : `Reserva ${r.id.slice(0, 8)}`,
       quantity: r.quantity,
       depositId: dep.id,
       depositAssumed: dep.assumed,
@@ -489,7 +489,7 @@ export function calculateAvailability(input: EngineInput): AvailabilityResult {
       code: 'OVERCOMMITTED',
       severity: 'critical',
       blocksConfirmation: true,
-      message: `Os compromissos (${totalDeducted}) superam o saldo-base (${base}) em ${round(-available)} unidade(s). Possível venda acima do saldo ou divergência.`,
+      message: `Os pedidos e reservas (${totalDeducted}) superam o estoque físico (${base}) em ${round(-available)} ${round(-available) === 1 ? 'unidade' : 'unidades'}. Possível venda acima do estoque ou divergência no Bling.`,
     });
   }
 
@@ -538,7 +538,7 @@ export function blockLabel(t: string): string {
 
 /** Verifica se uma venda de `qty` unidades pode ser atendida. */
 export function checkSale(result: AvailabilityResult, qty: number): SaleCheck {
-  const unit = result.product.unit ? ` ${result.product.unit}` : ' unidade(s)';
+  const unit = result.product.unit ? ` ${result.product.unit}` : ' un.';
   if (result.available === null) {
     return {
       requested: qty,

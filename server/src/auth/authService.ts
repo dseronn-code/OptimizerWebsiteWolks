@@ -175,7 +175,7 @@ async function failChallenge(token: string, c: any, ip?: string): Promise<never>
     });
   }
   const left = MFA_MAX_ATTEMPTS - c.attempts - 1;
-  throw new AuthError(left > 0 ? `Código incorreto. Restam ${left} tentativa(s).` : 'Código incorreto. Entre novamente com usuário e senha.', 401);
+  throw new AuthError(left > 0 ? `Código incorreto. ${left === 1 ? 'Resta 1 tentativa' : `Restam ${left} tentativas`}.` : 'Código incorreto. Entre novamente com usuário e senha.', 401);
 }
 
 /** Etapa 2 do login: código do app autenticador ou código de recuperação. */

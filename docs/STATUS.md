@@ -1,4 +1,4 @@
-# Status da entrega — Fase 1
+# Status da entrega
 
 ## Implementado
 
@@ -17,7 +17,11 @@
 | Chat com IA + ferramentas determinísticas | ✅ **⏳ modelo de linguagem depende de uma chave** (Groq/Gemini gratuitos ou Anthropic); sem ela, interpretador local | `ai/` |
 | Explicação detalhada dos saldos | ✅ | página do produto + chat |
 | Registro de sincronização | ✅ | Administração › Sincronização |
-| Testes automatizados das regras críticas | ✅ 38 testes | `server/test` |
+| Testes automatizados das regras críticas | ✅ 54 testes | `server/test` |
+| Tela Estoque (catálogo inteiro, filtros, planilha CSV) | ✅ | `web/src/pages/Stock.tsx`, `routes/stock.ts` |
+| Cadastro com código por e-mail e aprovação do administrador | ✅ | `auth/signupService.ts`, `lib/email.ts` |
+| Verificação em duas etapas (app autenticador) e alertas de segurança | ✅ | `auth/authService.ts`, `lib/totp.ts` |
+| App instalável no celular (PWA) com a identidade ITCOMTECH | ✅ | `web/public/manifest.webmanifest` |
 | Ambiente de demonstração identificado | ✅ | `npm run seed:demo`, faixa amarela, sufixo `[DEMO]` |
 
 Adiantado da Fase 2 (necessário para testes de concorrência e para o painel): solicitação,

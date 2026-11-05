@@ -1,15 +1,15 @@
-# Bling Stock AI
+# ITCOMTECH Estoque Inteligente
 
 Assistente de estoque para a equipe comercial: responde, em linguagem natural, **quanto de cada
 produto pode realmente ser vendido agora**, descontando do saldo do Bling apenas os compromissos
 que ainda não foram baixados — sem contar o mesmo compromisso duas vezes.
 
-> **Status: Fase 1 (MVP) implementada**, somente leitura em relação ao Bling, mais o núcleo do
-> módulo de reservas (Fase 2) necessário para os testes de concorrência. Ver
-> [docs/STATUS.md](docs/STATUS.md) para o que foi implementado, testado e o que depende de configuração.
+> **Somente leitura em relação ao Bling:** o sistema apenas consulta o ERP; nenhum pedido, estoque ou
+> movimentação é alterado. Ver [docs/STATUS.md](docs/STATUS.md) para o que foi implementado e testado, e
+> [docs/PUBLICAR.md](docs/PUBLICAR.md) para colocar no ar (Railway/Render) e instalar no celular.
 
 ## Como funciona em uma frase
-`disponível = saldo-base do Bling − (pedidos pagos/confirmados não baixados + pré-pedidos com reserva + reservas complementares + bloqueios)`,
+`disponível = estoque físico do Bling − (pedidos pagos/confirmados não baixados + pré-pedidos com reserva + reservas complementares + bloqueios)`,
 onde cada compromisso é classificado uma única vez (já baixado → não subtrai; reserva vinculada a pedido → conta pelo pedido).
 Detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
@@ -27,7 +27,7 @@ OptimizerWebsiteWolks/   (raiz do repositório)
 ```
 
 ## Rodar localmente (demonstração com dados fictícios)
-Requisitos: Node 20+ e PostgreSQL 14+.
+Requisitos: Node 22+ e PostgreSQL 14+.
 
 ```bash
 npm run install:all
@@ -52,8 +52,9 @@ A interface exibe a faixa **"AMBIENTE DE DEMONSTRAÇÃO"** e todos os produtos f
 createdb blingstock_test                       # banco exclusivo de testes (é recriado a cada execução)
 npm test                                       # ou TEST_DATABASE_URL=postgres://… npm test
 ```
-38 testes: os 15 cenários obrigatórios, prevenção de dupla contagem, concorrência, falha de
-sincronização, eventos fora de ordem, idempotência de webhooks, autenticação, perfis e privacidade.
+54 testes: os 15 cenários obrigatórios, prevenção de dupla contagem, concorrência, falha de
+sincronização, eventos fora de ordem, idempotência de webhooks, autenticação, verificação em duas etapas,
+cadastro com código por e-mail, perfis e privacidade.
 
 ## Produção (conectar ao Bling real)
 1. Cadastre um aplicativo no Bling (área do desenvolvedor) com a URL de redirecionamento

@@ -1,6 +1,7 @@
 import type { Db } from '../db/pool.js';
 import { pool } from '../db/pool.js';
 import { calculateAvailability } from '../engine/availability.js';
+import { brDate, brDateTime, pl, SYNC_RESOURCE_LABEL } from '../lib/labels.js';
 import { getSettings } from '../lib/settings.js';
 import { loadEngineInput } from '../stock/repository.js';
 import { recordAttempt } from '../sync/syncService.js';
@@ -76,9 +77,9 @@ export async function scanAlerts(): Promise<number> {
     );
     for (const r of syncRows) {
       if (r.last_error_at && (!r.last_success_at || r.last_error_at > r.last_success_at)) {
-        found.push({ type: 'SYNC_FAILED', severity: 'critical', dedupeKey: `sync_failed:${r.resource}`, message: `Falha na sincronização de ${r.resource}: ${r.last_error}` });
+        found.push({ type: 'SYNC_FAILED', severity: 'critical', dedupeKey: `sync_failed:${r.resource}`, message: `Falha na sincronização de ${SYNC_RESOURCE_LABEL[r.resource] ?? r.resource}: ${r.last_error}` });
       } else if (r.last_success_at && now.getTime() - r.last_success_at.getTime() > Math.max(3 * settings.sync.incrementalMinutes, settings.engine.ordersMaxAgeMinutes) * 60000) {
-        found.push({ type: 'SYNC_STALE', severity: 'warning', dedupeKey: `sync_stale:${r.resource}`, message: `Sincronização de ${r.resource} interrompida: último sucesso em ${r.last_success_at.toISOString()}.` });
+        found.push({ type: 'SYNC_STALE', severity: 'warning', dedupeKey: `sync_stale:${r.resource}`, message: `Sincronização de ${SYNC_RESOURCE_LABEL[r.resource] ?? r.resource} parada: último sucesso em ${brDateTime(r.last_success_at)}.` });
       }
     }
 
@@ -137,7 +138,7 @@ export async function scanAlerts(): Promise<number> {
     for (const po of incoming) {
       found.push({
         type: 'INCOMING_PENDING', severity: 'info', dedupeKey: `incoming_pending:${po.id}`,
-        message: `Pedido de compra ${po.number ?? po.id} (${po.supplier_name ?? 'fornecedor'}) previsto para ${po.expected_date} ainda não recebido.`,
+        message: `Pedido de compra ${po.number ?? po.id} (${po.supplier_name ?? 'fornecedor'}) previsto para ${brDate(po.expected_date)} ainda não recebido.`,
       });
     }
     const { rows: entryBlocks } = await pool.query(
@@ -179,7 +180,7 @@ export async function scanAlerts(): Promise<number> {
     for (const u of unmapped) {
       found.push({
         type: 'UNMAPPED_SITUATION', severity: 'warning', dedupeKey: `unmapped_situation:${u.situation_id}`,
-        message: `A situação "${u.name ?? u.situation_id}" não tem regra configurada (${u.n} pedido(s)). Configure em Administração › Regras de situação.`,
+        message: `A situação "${u.name ?? u.situation_id}" não tem regra configurada (${pl(u.n, 'pedido', 'pedidos')}). Configure em Administração › Regras de situação.`,
       });
     }
 

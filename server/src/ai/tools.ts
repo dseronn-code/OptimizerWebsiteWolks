@@ -3,10 +3,12 @@ import { config } from '../config.js';
 import { pool } from '../db/pool.js';
 import { checkSale } from '../engine/availability.js';
 import type { ExplanationLine } from '../engine/types.js';
+import { brDate, CATEGORY_TEXT, ISSUE_TYPE_LABEL, SEVERITY_LABEL, SYNC_RESOURCE_LABEL } from '../lib/labels.js';
 import { getSettings } from '../lib/settings.js';
 import { normalize } from '../lib/text.js';
 import { upsertAlert } from '../alerts/alertService.js';
 import { searchProducts, type ProductMatch } from '../stock/productSearch.js';
+import { stockOverview } from '../stock/overview.js';
 import { canSeeCustomer, getAvailability, type AvailabilityResponse, type Viewer } from '../stock/stockService.js';
 
 /**
@@ -44,7 +46,7 @@ export const toolSchemas = {
   entradas_previstas: z.object({ produto: productRef.optional(), ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Data limite AAAA-MM-DD') }),
   simular_cancelamento: z.object({ pedido: z.number().int().positive().describe('Número do pedido no Bling'), produto: productRef.optional() }),
   listar_produtos: z.object({
-    filtro: z.enum(['disponiveis', 'sem_estoque', 'nao_confirmados', 'todos']).optional().describe('disponiveis (padrão): com saldo para venda; sem_estoque: zerados; nao_confirmados: com aviso; todos'),
+    filtro: z.enum(['disponiveis', 'sem_estoque', 'nao_confirmados', 'saldo_negativo', 'comprometidos', 'todos']).optional().describe('disponiveis (padrão): com saldo para venda; sem_estoque: zerados; nao_confirmados: com aviso; saldo_negativo: estoque negativo no Bling; comprometidos: com pedidos/reservas em aberto; todos'),
     busca: z.string().max(80).optional().describe('Parte do nome/SKU ou categoria para filtrar (opcional)'),
     limite: z.number().int().positive().max(100).optional(),
   }),
@@ -89,6 +91,15 @@ export async function resolveProduct(ref: string, ctx: ToolContext): Promise<Res
   return { ambiguous: matches };
 }
 
+const LIST_TITLE: Record<string, string> = {
+  disponiveis: 'Produtos disponíveis para venda',
+  sem_estoque: 'Produtos sem saldo para venda',
+  nao_confirmados: 'Produtos com disponibilidade não confirmada',
+  saldo_negativo: 'Produtos com saldo negativo no Bling',
+  comprometidos: 'Produtos com pedidos ou reservas em aberto',
+  todos: 'Produtos',
+};
+
 function localTime(iso: string | Date | null | undefined): string | null {
   if (!iso) return null;
   return new Date(iso).toLocaleString('pt-BR', { timeZone: config.APP_TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
@@ -127,10 +138,10 @@ function summarize(r: AvailabilityResponse) {
     disponivel_para_nova_venda: r.availableForSale,
     saldo_calculado: r.available,
     status: r.status === 'CONFIRMED' ? 'CONFIRMADA' : 'NÃO CONFIRMADA',
-    avisos: r.issues.map((i) => `${i.blocksConfirmation ? '[impede confirmação] ' : ''}${i.message}`),
+    avisos: r.issues.map((i) => `${i.message}${i.blocksConfirmation ? ' (impede a confirmação)' : ''}`),
     por_deposito: r.byDeposit.map((d) => ({ deposito: d.depositName, ignorado: d.ignored, fisico: d.physical, disponivel: d.availableForSale })),
     oportunidades_sem_reserva: r.opportunitiesTotal,
-    entradas_previstas: r.incoming.map((e) => ({ pedido_compra: e.purchaseOrderNumber, quantidade: e.quantity, previsao: e.expectedDate })),
+    entradas_previstas: r.incoming.map((e) => ({ pedido_compra: e.purchaseOrderNumber, quantidade: e.quantity, previsao: brDate(e.expectedDate) })),
     dados_de_local: localTime(r.dataAsOf),
     saldo_atualizado_agora: r.refreshed,
     erro_atualizacao: r.refreshError,
@@ -256,10 +267,10 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
         situacao: o.situacao,
         categoria: o.category,
         data: o.order_date,
-        previsao: o.expected_date,
+        previsao: brDate(o.expected_date),
         itens: o.itens,
       }));
-      if (out.length) ctx.cards.push({ type: 'table', title: `Pedidos — ${input.situacao}`, columns: ['Pedido', 'Cliente', 'Situação', 'Data', 'Itens'], rows: out.map((o) => [o.pedido, o.cliente, o.situacao, o.data, o.itens]) });
+      if (out.length) ctx.cards.push({ type: 'table', title: cat === 'COMMITTED' ? 'Pedidos em aberto (confirmados, sem baixa)' : cat ? `Pedidos — ${CATEGORY_TEXT[cat] ?? input.situacao}` : `Pedidos — ${input.situacao}`, columns: ['Pedido', 'Cliente', 'Situação', 'Data', 'Itens'], rows: out.map((o) => [o.pedido, o.cliente, o.situacao ?? CATEGORY_TEXT[o.categoria] ?? o.categoria, brDate(o.data), o.itens]) });
       return { total: out.length, pedidos: out };
     }
     case 'produtos_com_divergencia': {
@@ -269,8 +280,8 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
            'CANCELLED_AFTER_POSTING', 'CANCELLED_WITH_ACTIVE_RESERVATION', 'COMMITTED_WITHOUT_POSTING', 'PARTIAL_DELIVERY_NOT_POSTED')
          ORDER BY CASE a.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, a.updated_at DESC LIMIT 50`,
       );
-      if (rows.length) ctx.cards.push({ type: 'table', title: 'Divergências abertas', columns: ['Gravidade', 'Tipo', 'Produto', 'Descrição'], rows: rows.map((r) => [r.severity, r.type, r.sku ?? r.name ?? '—', r.message]) });
-      return { total: rows.length, divergencias: rows.map((r) => ({ tipo: r.type, gravidade: r.severity, produto: r.sku ?? r.name, descricao: r.message })) };
+      if (rows.length) ctx.cards.push({ type: 'table', title: 'Divergências abertas', columns: ['Gravidade', 'Tipo', 'Produto', 'Descrição'], rows: rows.map((r) => [SEVERITY_LABEL[r.severity] ?? r.severity, ISSUE_TYPE_LABEL[r.type] ?? r.type, r.sku ?? r.name ?? '—', r.message]) });
+      return { total: rows.length, divergencias: rows.map((r) => ({ tipo: ISSUE_TYPE_LABEL[r.type] ?? r.type, gravidade: SEVERITY_LABEL[r.severity] ?? r.severity, produto: r.sku ?? r.name, descricao: r.message })) };
     }
     case 'reservas_vencendo': {
       const hours = input.horas ?? settings.reservations.expiringSoonHours;
@@ -312,7 +323,7 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
          ORDER BY po.expected_date NULLS LAST LIMIT 100`,
         [productId, input.ate ?? null],
       );
-      const out = rows.map((r) => ({ pedido_compra: r.number, previsao: r.expected_date, fornecedor: r.supplier_name, produto: `${r.sku ?? ''} ${r.name ?? ''}`.trim(), quantidade: r.quantity }));
+      const out = rows.map((r) => ({ pedido_compra: r.number, previsao: brDate(r.expected_date), fornecedor: r.supplier_name, produto: `${r.sku ?? ''} ${r.name ?? ''}`.trim(), quantidade: r.quantity }));
       if (out.length) ctx.cards.push({ type: 'table', title: 'Entradas previstas', columns: ['Pedido compra', 'Previsão', 'Fornecedor', 'Produto', 'Qtd'], rows: out.map((o) => [o.pedido_compra, o.previsao, o.fornecedor, o.produto, o.quantidade]) });
       return { observacao: 'Entradas previstas não aumentam a disponibilidade atual até serem recebidas e lançadas no Bling.', hoje: new Date().toISOString().slice(0, 10), entradas: out };
     }
@@ -341,47 +352,47 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       return { simulacao: true, observacao: 'Simulação apenas — nada foi alterado.', resultados: out };
     }
     case 'listar_produtos': {
+      // usa a mesma visão da tela "Estoque": cobre o catálogo inteiro e fica em cache por 60 s
       const filtro = input.filtro ?? 'disponiveis';
       const limite = input.limite ?? 30;
-      const busca = input.busca ? `%${input.busca}%` : null;
-      const { rows } = await pool.query<{ id: number }>(
-        `SELECT p.id FROM products p
-         WHERE p.active AND p.format <> 'V' AND p.kind = 'P'
-           AND (EXISTS (SELECT 1 FROM stock_balances b WHERE b.product_id = p.id) OR p.format = 'E')
-           AND ($1::text IS NULL OR p.name ILIKE $1 OR p.sku ILIKE $1)
-         ORDER BY p.name LIMIT 500`,
-        [busca],
-      );
-      const items: { id: number; sku: string | null; nome: string; disponivel: number; fisico: number | null; status: string; unidade: string | null }[] = [];
-      for (const { id } of rows) {
-        const r = await getAvailability(id, { viewer: ctx.viewer });
-        if (!r) continue;
-        items.push({ id, sku: r.product.sku, nome: r.product.name, disponivel: r.availableForSale, fisico: r.physicalTotal, status: r.status, unidade: r.product.unit ?? null });
-      }
-      const filtered = items
-        .filter((i) => (filtro === 'disponiveis' ? i.disponivel > 0 : filtro === 'sem_estoque' ? i.disponivel <= 0 : filtro === 'nao_confirmados' ? i.status !== 'CONFIRMED' : true))
-        .sort((a, b) => b.disponivel - a.disponivel || a.nome.localeCompare(b.nome));
+      const busca = input.busca ? normalize(input.busca) : null;
+      const all = await stockOverview(null);
+      const filtered = all
+        .filter((i) => !busca || normalize(`${i.sku ?? ''} ${i.name}`).includes(busca))
+        .filter((i) =>
+          filtro === 'disponiveis' ? i.availableForSale > 0
+          : filtro === 'sem_estoque' ? i.availableForSale <= 0
+          : filtro === 'nao_confirmados' ? i.status !== 'CONFIRMED'
+          : filtro === 'saldo_negativo' ? (i.physical ?? 0) < 0
+          : filtro === 'comprometidos' ? i.committed > 0
+          : true)
+        .sort((a, b) =>
+          filtro === 'saldo_negativo' ? (a.physical ?? 0) - (b.physical ?? 0)
+          : filtro === 'comprometidos' ? b.committed - a.committed
+          : b.availableForSale - a.availableForSale || a.name.localeCompare(b.name));
       const shown = filtered.slice(0, limite);
+      const titulo = LIST_TITLE[filtro];
       if (shown.length) {
         ctx.cards.push({
           type: 'table',
-          title: filtro === 'sem_estoque' ? 'Produtos sem saldo para venda' : filtro === 'nao_confirmados' ? 'Produtos com disponibilidade não confirmada' : 'Produtos disponíveis para venda',
-          columns: ['SKU', 'Produto', 'Disponível', 'Físico', 'Status'],
-          rows: shown.map((i) => [i.sku, i.nome, i.disponivel, i.fisico, i.status === 'CONFIRMED' ? 'Confirmada' : 'Não confirmada']),
+          title: titulo,
+          columns: ['SKU', 'Produto', 'Físico', 'Comprometido', 'Disponível', 'Situação'],
+          rows: shown.map((i) => [i.sku, i.name, i.physical, i.committed, i.availableForSale, i.status === 'CONFIRMED' ? 'Confirmada' : 'Não confirmada']),
         });
       }
       return {
         filtro,
+        titulo,
         total_encontrado: filtered.length,
         exibidos: shown.length,
-        produtos: shown.map((i) => ({ sku: i.sku, nome: i.nome, disponivel_para_venda: i.disponivel, fisico: i.fisico, unidade: i.unidade, status: i.status === 'CONFIRMED' ? 'CONFIRMADA' : 'NÃO CONFIRMADA' })),
+        produtos: shown.map((i) => ({ sku: i.sku, nome: i.name, fisico: i.physical, comprometido: i.committed, disponivel_para_venda: i.availableForSale, unidade: i.unit, status: i.status === 'CONFIRMED' ? 'CONFIRMADA' : 'NÃO CONFIRMADA' })),
       };
     }
     case 'status_sincronizacao': {
       const { rows } = await pool.query('SELECT resource, last_success_at, last_attempt_at, last_error, last_error_at FROM sync_state ORDER BY resource');
       return {
         modo: settings.appMode === 'demo' ? 'DEMONSTRAÇÃO (dados fictícios)' : 'Bling (produção)',
-        recursos: rows.map((r) => ({ recurso: r.resource, ultimo_sucesso: r.last_success_at, ultima_tentativa: r.last_attempt_at, erro: r.last_error_at && (!r.last_success_at || r.last_error_at > r.last_success_at) ? r.last_error : null })),
+        recursos: rows.map((r) => ({ recurso: SYNC_RESOURCE_LABEL[r.resource] ?? r.resource, ultimo_sucesso: r.last_success_at, ultima_tentativa: r.last_attempt_at, erro: r.last_error_at && (!r.last_success_at || r.last_error_at > r.last_success_at) ? r.last_error : null })),
       };
     }
   }

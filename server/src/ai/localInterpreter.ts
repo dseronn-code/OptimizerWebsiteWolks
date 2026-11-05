@@ -1,5 +1,13 @@
 import { config } from '../config.js';
+import { brDate, CATEGORY_TEXT, pl } from '../lib/labels.js';
 import { normalize } from '../lib/text.js';
+
+const RES_STATUS: Record<string, string> = { PENDING: 'aguardando aprovação', ACTIVE: 'ativa', EXPIRED: 'vencida' };
+
+/** Data AAAA-MM-DD daqui a N dias, no fuso da empresa. */
+function isoDay(days: number): string {
+  return new Date(Date.now() + days * 86400000).toLocaleDateString('en-CA', { timeZone: config.APP_TIMEZONE });
+}
 import { executeTool, type ToolContext } from './tools.js';
 
 /**
@@ -37,7 +45,7 @@ function fmt(n: number | null | undefined): string {
 }
 
 function fmtDate(iso: string | null | undefined): string {
-  return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: config.APP_TIMEZONE }) : 'sem dados';
+  return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: config.APP_TIMEZONE, dateStyle: 'short', timeStyle: 'short' }) : 'sem dados';
 }
 
 function availabilityText(r: any, saleMsg?: string): string {
@@ -53,9 +61,9 @@ function availabilityText(r: any, saleMsg?: string): string {
   lines.push(`Estoque disponível para novas vendas: ${fmt(r.disponivel_para_nova_venda)}`);
   if (r.kit) lines.push(`Kits montáveis com os componentes: ${fmt(r.kit.disponivel_kits)}`);
   if (saleMsg) lines.push(`Resposta: ${saleMsg}`);
-  else if (r.status === 'CONFIRMADA') lines.push(`Resposta: há ${fmt(r.disponivel_para_nova_venda)} disponível(is) para nova venda.`);
+  else if (r.status === 'CONFIRMADA') lines.push(`Resposta: há ${pl(r.disponivel_para_nova_venda, 'unidade disponível', 'unidades disponíveis')} para nova venda.`);
   if (r.status !== 'CONFIRMADA') {
-    lines.push(`Atenção: disponibilidade NÃO confirmada.`);
+    lines.push('Atenção: disponibilidade não confirmada — confirme com o gestor antes de prometer ao cliente.');
     for (const a of r.avisos.slice(0, 5)) lines.push(`• ${a}`);
   } else if (r.avisos.length) {
     for (const a of r.avisos.slice(0, 3)) lines.push(`• ${a}`);
@@ -83,6 +91,15 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
   const refersToLast = /\b(desse|deste|esse|este|dele|mesmo)\b/.test(q) && ctx.lastProductId !== null;
   const productOr = (extra: string[] = []) => (refersToLast && !productTerm(question, extra) ? 'esse' : productTerm(question, extra) || (ctx.lastProductId ? 'esse' : ''));
 
+  // --- cumprimentos e agradecimentos
+  if (/^(oi|ola|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|ok|blz|beleza|tudo bem)\b[\s!.?]*$/.test(q)) {
+    return {
+      answer: /obrigad|valeu/.test(q)
+        ? 'Por nada! Se precisar, é só perguntar sobre qualquer produto.'
+        : 'Olá! Posso consultar o estoque disponível para venda. Pergunte, por exemplo: "Consigo vender 10 unidades do [nome ou SKU]?" ou "Quais produtos estão sem estoque?".',
+      toolCalls: calls,
+    };
+  }
   // --- sincronização
   if (/\b(sincroniz|atualizad|ultima atualiza)/.test(q) && !/\bproduto\b/.test(q)) {
     const r = await run('status_sincronizacao', {});
@@ -91,17 +108,26 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
       toolCalls: calls,
     };
   }
+  // --- saldo negativo no Bling
+  if (/negativ/.test(q)) {
+    const r = await run('listar_produtos', { filtro: 'saldo_negativo' });
+    if (!r.total_encontrado) return { answer: 'Nenhum produto está com saldo negativo no Bling.', toolCalls: calls };
+    return {
+      answer: `${r.titulo} (${r.total_encontrado}${r.exibidos < r.total_encontrado ? `, mostrando ${r.exibidos}` : ''}):\n${r.produtos.map((p: any) => `• ${p.sku ? `${p.sku} — ` : ''}${p.nome}: ${fmt(p.fisico)}${p.unidade ? ` ${p.unidade}` : ''}`).join('\n')}\n\nSaldo negativo é uma divergência no próprio Bling (saída lançada sem entrada correspondente). Esses produtos contam como 0 disponível até o estoque ser acertado no Bling.`,
+      toolCalls: calls,
+    };
+  }
   // --- divergências
-  if (/diverg|inconsist|negativ/.test(q)) {
+  if (/diverg|inconsist/.test(q)) {
     const r = await run('produtos_com_divergencia', {});
-    return { answer: r.total ? `${r.total} divergência(s) abertas:\n${r.divergencias.map((d: any) => `• [${d.gravidade}] ${d.descricao}`).join('\n')}` : 'Nenhuma divergência aberta no momento.', toolCalls: calls };
+    return { answer: r.total ? `${pl(r.total, 'divergência', 'divergências')} em aberto:\n${r.divergencias.map((d: any) => `• ${d.gravidade} — ${d.descricao}`).join('\n')}` : 'Nenhuma divergência aberta no momento.', toolCalls: calls };
   }
   // --- reservas vencendo
   if (/(vencend|vencer|vencid|expira)/.test(q) && /reserv/.test(q)) {
     const r = await run('reservas_vencendo', {});
     return {
       answer: r.reservas.length
-        ? `Reservas vencendo nas próximas ${r.horas} h ou já vencidas:\n${r.reservas.map((x: any) => `• ${x.produto}: ${fmt(x.quantidade)} — ${x.cliente} (${x.vendedor}) ${x.vencida ? 'VENCIDA' : `vence ${fmtDate(x.vence_em)}`}`).join('\n')}`
+        ? `Reservas vencendo nas próximas ${r.horas} h ou já vencidas:\n${r.reservas.map((x: any) => `• ${x.produto}: ${fmt(x.quantidade)} — ${x.cliente} (${x.vendedor}) — ${x.vencida ? 'vencida' : `vence em ${x.vence_em_local}`}`).join('\n')}`
         : `Nenhuma reserva vencendo nas próximas ${r.horas} h.`,
       toolCalls: calls,
     };
@@ -121,15 +147,26 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
   if (/(entrada|chegar|chega|previst|recebiment|compra)/.test(q)) {
     const term = productTerm(question, ['entrada', 'entradas', 'prevista', 'previstas', 'previsto', 'chegar', 'chega', 'amanha', 'semana', 'alguma', 'algum', 'recebimento', 'compra']);
     let ate: string | undefined;
-    if (/amanha/.test(q)) ate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    else if (/semana/.test(q)) ate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    if (/amanha/.test(q)) ate = isoDay(1);
+    else if (/semana/.test(q)) ate = isoDay(7);
     const r = await run('entradas_previstas', { produto: term || undefined, ate });
     const amb = ambiguousText(r);
     if (amb) return { answer: amb, toolCalls: calls };
     return {
       answer: r.entradas.length
-        ? `Entradas previstas${ate ? ` até ${ate}` : ''}:\n${r.entradas.map((e: any) => `• ${e.produto}: ${fmt(e.quantidade)} — previsão ${e.previsao ?? 'não informada'} (compra ${e.pedido_compra ?? '?'}, ${e.fornecedor ?? 'fornecedor'})`).join('\n')}\n${r.observacao}`
-        : `Não há entradas previstas${ate ? ` até ${ate}` : ''}${term ? ' para esse produto' : ''}.`,
+        ? `Entradas previstas${ate ? ` até ${brDate(ate)}` : ''}:\n${r.entradas.map((e: any) => `• ${e.produto}: ${fmt(e.quantidade)} — previsão ${e.previsao ?? 'não informada'} (compra ${e.pedido_compra ?? '?'}, ${e.fornecedor ?? 'fornecedor'})`).join('\n')}\n${r.observacao}`
+        : `Não há entradas previstas${ate ? ` até ${brDate(ate)}` : ''}${term ? ' para esse produto' : ''}.`,
+      toolCalls: calls,
+    };
+  }
+  // --- pedidos em aberto (de todos os produtos) que prendem estoque
+  if (/\bpedidos?\b/.test(q) && /(em aberto|abertos?|prendendo|prendem|comprometendo|pendentes?|nao baixad|sem baixa)/.test(q) && !refersToLast &&
+      !productTerm(question, ['pedidos', 'pedido', 'aberto', 'abertos', 'prendendo', 'prendem', 'comprometendo', 'pendente', 'pendentes', 'baixados', 'baixado', 'baixa'])) {
+    const r = await run('pedidos_por_situacao', { situacao: 'confirmados' });
+    return {
+      answer: r.total
+        ? `${pl(r.total, 'pedido em aberto prendendo', 'pedidos em aberto prendendo')} estoque (ainda sem baixa no Bling):\n${r.pedidos.map((p: any) => `• Pedido ${p.pedido} — ${p.cliente} — ${p.situacao ?? 'sem situação'}${p.data ? ` — ${brDate(p.data)}` : ''} — ${p.itens}`).join('\n')}`
+        : 'Nenhum pedido em aberto prendendo estoque no momento.',
       toolCalls: calls,
     };
   }
@@ -138,7 +175,7 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
     const situacao = /transportad/.test(q) ? 'transportadora' : /cotac/.test(q) ? 'cotacoes' : /pre ?pedido/.test(q) ? 'pre-pedidos' : 'aguardando';
     const r = await run('pedidos_por_situacao', { situacao });
     return {
-      answer: r.total ? `${r.total} pedido(s) — ${situacao}:\n${r.pedidos.map((p: any) => `• Pedido ${p.pedido} — ${p.cliente} — ${p.situacao ?? p.categoria} — ${p.itens}`).join('\n')}` : `Nenhum pedido encontrado para "${situacao}".`,
+      answer: r.total ? `${pl(r.total, 'pedido', 'pedidos')} — ${situacao}:\n${r.pedidos.map((p: any) => `• Pedido ${p.pedido} — ${p.cliente} — ${p.situacao ?? CATEGORY_TEXT[p.categoria] ?? p.categoria} — ${p.itens}`).join('\n')}` : `Nenhum pedido encontrado para "${situacao}".`,
       toolCalls: calls,
     };
   }
@@ -167,11 +204,11 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
   if (cliente && !/produto/.test(q)) {
     const r = await run('reservas_do_cliente', { cliente: cliente[1].trim() });
     const parts = [
-      ...r.reservas.map((x: any) => `• Reserva: ${x.produto} — ${fmt(x.quantidade)} (${x.status}, vence ${fmtDate(x.vence_em)}, vendedor ${x.vendedor})`),
-      ...r.pedidos.map((x: any) => `• Pedido ${x.pedido}: ${x.produto} — ${fmt(x.quantidade)} (${x.situacao ?? x.categoria})`),
+      ...r.reservas.map((x: any) => `• Reserva: ${x.produto} — ${fmt(x.quantidade)} (${RES_STATUS[x.status] ?? x.status}, vence ${x.vence_em_local ?? fmtDate(x.vence_em)}, vendedor ${x.vendedor})`),
+      ...r.pedidos.map((x: any) => `• Pedido ${x.pedido}: ${x.produto} — ${fmt(x.quantidade)} (${x.situacao ?? CATEGORY_TEXT[x.categoria] ?? x.categoria})`),
     ];
     return {
-      answer: parts.length ? `Compromissos de "${cliente[1].trim()}":\n${parts.join('\n')}${r.ocultos_por_permissao ? `\n(${r.ocultos_por_permissao} registro(s) de outros vendedores não exibidos.)` : ''}` : `Não encontrei reservas ou pedidos em aberto para "${cliente[1].trim()}".`,
+      answer: parts.length ? `Compromissos de "${cliente[1].trim()}":\n${parts.join('\n')}${r.ocultos_por_permissao ? `\n(${pl(r.ocultos_por_permissao, 'registro', 'registros')} de outros vendedores não exibido${r.ocultos_por_permissao === 1 ? '' : 's'}.)` : ''}` : `Não encontrei reservas ou pedidos em aberto para "${cliente[1].trim()}".`,
       toolCalls: calls,
     };
   }
@@ -205,14 +242,14 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
   const term = productOr(['quanto', 'livre', 'disponivel']);
   if (!term) {
     return {
-      answer: 'Posso consultar disponibilidade de produtos, verificar se uma venda é possível, listar compromissos, reservas de clientes, entradas previstas e divergências. Ex.: "Consigo vender 35 peças do ABC agora?"',
+      answer: 'Posso consultar a disponibilidade de um produto, verificar se uma venda é possível, listar produtos disponíveis ou sem estoque, pedidos em aberto, reservas de clientes, entradas previstas e divergências. Ex.: "Consigo vender 35 unidades do [nome ou SKU] agora?"',
       toolCalls: calls,
     };
   }
   const r = await run('consultar_disponibilidade', { produto: term });
   if (r?.erro && /Nenhum produto/.test(r.erro)) {
     return {
-      answer: `Não encontrei um produto com "${term}". Você pode:\n• informar o SKU ou parte do nome (ex.: "quanto temos do ABC?")\n• pedir a lista: "quais produtos estão disponíveis?"\n• usar a busca no topo da tela.`,
+      answer: `Não encontrei um produto com "${term}". Você pode:\n• informar o SKU ou parte do nome (ex.: "quanto temos do [SKU]?")\n• pedir a lista: "quais produtos estão disponíveis?"\n• usar a busca no topo da tela.`,
       toolCalls: calls,
     };
   }

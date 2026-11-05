@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { ErrorMsg, PageHeader, Table } from '../components/ui';
-import { CATEGORY_LABEL, dateTime } from '../format';
+import { auditDetails, auditEntity, AUDIT_ACTION, BLING_STATUS, CATEGORY_LABEL, dateTime, JOB_STATUS, JOB_TYPE, SYNC_RESOURCE, SYNC_STATUS, syncOrigin, WEBHOOK_STATUS } from '../format';
 
 type Tab = 'bling' | 'rules' | 'users' | 'settings' | 'sync' | 'audit';
 
@@ -80,17 +80,17 @@ function BlingTab() {
         </div>
       </div>
       <div className="card space-y-3 p-4 text-sm">
-        <div className="font-semibold">Conexão OAuth 2.0</div>
+        <div className="font-semibold">Conexão com o Bling</div>
         {!c?.configured && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800">
             Configure BLING_CLIENT_ID, BLING_CLIENT_SECRET e BLING_REDIRECT_URI nas variáveis de ambiente do servidor (nunca no navegador) e reinicie a aplicação.
           </p>
         )}
         <dl className="grid gap-2 sm:grid-cols-2">
-          <div><dt className="label">Status</dt><dd>{c?.status ?? '—'}</dd></div>
+          <div><dt className="label">Situação</dt><dd className={c?.status === 'connected' ? 'font-medium text-emerald-700' : ''}>{c?.status ? BLING_STATUS[c.status] ?? c.status : '—'}</dd></div>
           <div><dt className="label">Conectado em</dt><dd>{dateTime(c?.connected_at)}</dd></div>
-          <div><dt className="label">Token expira</dt><dd>{dateTime(c?.access_expires_at)}</dd></div>
-          <div><dt className="label">Última renovação</dt><dd>{dateTime(c?.last_refresh_at)}</dd></div>
+          <div><dt className="label">Acesso válido até</dt><dd>{dateTime(c?.access_expires_at)}</dd></div>
+          <div><dt className="label">Última renovação do acesso</dt><dd>{dateTime(c?.last_refresh_at)}</dd></div>
           <div className="sm:col-span-2"><dt className="label">URL de redirecionamento (cadastrar no app do Bling)</dt><dd className="break-all font-mono text-xs">{info?.redirectUri ?? '—'}</dd></div>
           <div className="sm:col-span-2"><dt className="label">URL de webhook (cadastrar no app do Bling)</dt><dd className="break-all font-mono text-xs">{info?.webhookUrl}</dd></div>
           {c?.last_error && <div className="sm:col-span-2 text-rose-700">Último erro: {c.last_error}</div>}
@@ -99,7 +99,7 @@ function BlingTab() {
           <button className="btn-primary" disabled={!c?.configured} onClick={connect}>{c?.status === 'connected' ? 'Reconectar' : 'Conectar ao Bling'}</button>
           {c?.status === 'connected' && <button className="btn-secondary" onClick={() => api.post('/api/admin/bling/disconnect').then(load)}>Desconectar</button>}
         </div>
-        <p className="text-xs text-slate-500">Fase 1: o sistema apenas LÊ dados do Bling. Nenhum pedido, estoque ou movimentação é alterado.</p>
+        <p className="text-xs text-slate-500">Somente leitura: o sistema apenas consulta o Bling. Nenhum pedido, estoque ou movimentação é alterado.</p>
       </div>
     </div>
   );
@@ -157,7 +157,7 @@ function RulesTab({ editable }: { editable: boolean }) {
       {editable && rows.some((r) => !r.category) && (
         <div className="card flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50 p-4">
           <p className="text-sm text-brand-900">
-            Há <b>{rows.filter((r) => !r.category).length}</b> situação(ões) sem regra. O sistema pode configurar automaticamente pelo nome
+            {rows.filter((r) => !r.category).length === 1 ? <>Há <b>1</b> situação sem regra.</> : <>Há <b>{rows.filter((r) => !r.category).length}</b> situações sem regra.</>} O sistema pode configurar automaticamente pelo nome
             (Atendido, Cancelado, Em aberto…), de forma conservadora. Você pode ajustar depois.
           </p>
           <button className="btn-primary" onClick={suggest} disabled={busy}>{busy ? 'Aplicando…' : 'Aplicar configuração recomendada'}</button>
@@ -243,25 +243,26 @@ function UsersTab() {
         </section>
       )}
       <form onSubmit={create} className="card grid gap-3 p-4 sm:grid-cols-6">
-        <input className="input" placeholder="usuário" required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-        <input className="input sm:col-span-2" placeholder="Nome completo" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input className="input" type="password" placeholder="Senha inicial" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-        <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+        <h2 className="text-sm font-semibold sm:col-span-6">Novo usuário</h2>
+        <div><label className="label" htmlFor="nu-user">Usuário (login)</label><input id="nu-user" className="input" autoCapitalize="none" required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></div>
+        <div className="sm:col-span-2"><label className="label" htmlFor="nu-name">Nome completo</label><input id="nu-name" className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+        <div><label className="label" htmlFor="nu-pass">Senha inicial</label><input id="nu-pass" className="input" type="password" autoComplete="new-password" required minLength={10} placeholder="mín. 10, letras e números" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+        <div><label className="label" htmlFor="nu-role">Perfil</label><select id="nu-role" className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
           <option value="vendedor">Vendedor</option><option value="gestor">Gestor</option><option value="admin">Administrador</option>
-        </select>
-        <input className="input" placeholder="Id vendedor Bling" value={form.blingSellerId} onChange={(e) => setForm({ ...form, blingSellerId: e.target.value })} />
+        </select></div>
+        <div><label className="label" htmlFor="nu-seller" title="Código do vendedor no Bling: liga os pedidos do Bling a este usuário">Cód. vendedor no Bling</label><input id="nu-seller" className="input" inputMode="numeric" placeholder="opcional" value={form.blingSellerId} onChange={(e) => setForm({ ...form, blingSellerId: e.target.value })} /></div>
         <button className="btn-primary sm:col-span-6 sm:justify-self-end">Criar usuário</button>
       </form>
       <ErrorMsg error={error} />
       <div className="card overflow-hidden">
-        <Table columns={['Usuário', 'Nome', 'Perfil', '2FA', 'Vendedor Bling', 'Ativo', '']}>
+        <Table columns={['Usuário', 'Nome', 'Perfil', '2 etapas', 'Cód. vendedor Bling', 'Ativo', '']}>
           {users.map((u) => (
             <tr key={u.id}>
               <td className="td font-mono text-xs">{u.username}</td>
               <td className="td">
                 {u.name}
                 {u.email && u.email !== u.username && <div className="text-xs text-slate-400">{u.email}</div>}
-                {u.locked_until && new Date(u.locked_until) > new Date() && <span className="ml-2 text-xs text-rose-600">bloqueado</span>}
+                {u.locked_until && new Date(u.locked_until) > new Date() && <span className="ml-2 text-xs text-rose-600">bloqueado temporariamente (senha errada)</span>}
                 {u.pending_approval && (
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800">Aguardando aprovação</span>
@@ -271,13 +272,13 @@ function UsersTab() {
                 )}
               </td>
               <td className="td">
-                <select className="input" value={u.role} onChange={(e) => update(u.id, { role: e.target.value })}>
+                <select className="input min-w-[9.5rem]" aria-label={`Perfil de ${u.name}`} value={u.role} onChange={(e) => update(u.id, { role: e.target.value })}>
                   <option value="vendedor">Vendedor</option><option value="gestor">Gestor</option><option value="admin">Administrador</option>
                 </select>
               </td>
               <td className="td text-xs">{u.mfa_enabled ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">Ativo</span> : <span className="text-slate-400">—</span>}</td>
-              <td className="td"><input className="input w-28" defaultValue={u.bling_seller_id ?? ''} onBlur={(e) => update(u.id, { blingSellerId: e.target.value ? Number(e.target.value) : null })} /></td>
-              <td className="td"><input type="checkbox" checked={u.active} onChange={(e) => update(u.id, { active: e.target.checked })} /></td>
+              <td className="td"><input className="input w-28" inputMode="numeric" aria-label={`Código do vendedor no Bling de ${u.name}`} defaultValue={u.bling_seller_id ?? ''} onBlur={(e) => update(u.id, { blingSellerId: e.target.value ? Number(e.target.value) : null })} /></td>
+              <td className="td"><input type="checkbox" aria-label={`${u.name} ativo`} checked={u.active} onChange={(e) => update(u.id, { active: e.target.checked })} /></td>
               <td className="td">
                 <div className="flex flex-wrap gap-1">
                   <button className="btn-secondary px-2 py-1 text-xs" onClick={() => { const p = prompt('Nova senha (mín. 10 caracteres, letras e números):'); if (p) void update(u.id, { password: p }); }}>Redefinir senha</button>
@@ -321,38 +322,42 @@ function SettingsTab({ editable }: { editable: boolean }) {
   return (
     <div className="card space-y-5 p-4">
       <section className="grid gap-3 sm:grid-cols-3">
+        <h2 className="text-sm font-semibold text-slate-800 sm:col-span-3">Cálculo de disponibilidade</h2>
         <div>
-          <label className="label">Base de cálculo</label>
+          <label className="label">Base do cálculo de disponibilidade</label>
           <select className="input" disabled={!editable} value={s.engine.baseMode} onChange={(e) => set('engine', 'baseMode', e.target.value)}>
             <option value="PHYSICAL">Estoque físico (recomendado)</option>
             <option value="VIRTUAL">Saldo virtual do Bling</option>
           </select>
         </div>
-        {numField('engine', 'maxBalanceAgeMinutes', 'Saldo máx. sem atualização (min)')}
-        {numField('engine', 'criticalRefreshMinutes', 'Atualizar saldo em consulta crítica após (min)')}
-        {numField('engine', 'ordersMaxAgeMinutes', 'Pedidos máx. sem sincronizar (min)')}
+        {numField('engine', 'maxBalanceAgeMinutes', 'Saldo considerado atualizado por até (min)')}
+        {numField('engine', 'criticalRefreshMinutes', 'Ao verificar uma venda, buscar saldo novo no Bling se tiver mais de (min)')}
+        {numField('engine', 'ordersMaxAgeMinutes', 'Pedidos considerados atualizados por até (min)')}
         <div>
-          <label className="label">Reserva vencida</label>
+          <label className="label">Quando uma reserva vence</label>
           <select className="input" disabled={!editable} value={s.engine.expiredReservationPolicy} onChange={(e) => set('engine', 'expiredReservationPolicy', e.target.value)}>
-            <option value="KEEP_UNTIL_REVIEW">Mantém até revisão do gestor</option>
-            <option value="AUTO_RELEASE">Libera automaticamente</option>
+            <option value="KEEP_UNTIL_REVIEW">Continua descontando até o gestor revisar</option>
+            <option value="AUTO_RELEASE">Libera as unidades automaticamente</option>
           </select>
         </div>
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
-        {numField('sync', 'incrementalMinutes', 'Sincronização incremental a cada (min)')}
-        {numField('sync', 'reconcileMinutes', 'Reconciliação a cada (min)')}
-        {numField('sync', 'initialLookbackDays', 'Carga inicial de pedidos (dias)')}
+        <h2 className="text-sm font-semibold text-slate-800 sm:col-span-3">Sincronização com o Bling</h2>
+        {numField('sync', 'incrementalMinutes', 'Sincronização automática a cada (min)')}
+        {numField('sync', 'reconcileMinutes', 'Conferência completa dos pedidos a cada (min)')}
+        {numField('sync', 'initialLookbackDays', 'Importar pedidos dos últimos (dias)')}
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
+        <h2 className="text-sm font-semibold text-slate-800 sm:col-span-3">Reservas e privacidade</h2>
         {numField('reservations', 'defaultValidityHours', 'Validade padrão da reserva (h)')}
-        {numField('reservations', 'maxValidityDays', 'Validade máxima (dias)')}
-        {numField('reservations', 'expiringSoonHours', 'Alertar vencimento com antecedência (h)')}
+        {numField('reservations', 'maxValidityDays', 'Validade máxima da reserva (dias)')}
+        {numField('reservations', 'expiringSoonHours', 'Avisar vencimento da reserva com antecedência de (h)')}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.reservations.autoApproveSellers} onChange={(e) => set('reservations', 'autoApproveSellers', e.target.checked)} /> Aprovar automaticamente reservas de vendedores quando houver saldo confirmado</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.privacy.sellersSeeAllCustomers} onChange={(e) => set('privacy', 'sellersSeeAllCustomers', e.target.checked)} /> Vendedores veem clientes de outros vendedores</label>
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
-        <div className="sm:col-span-3 text-sm font-medium text-slate-700">Verificação em duas etapas (app autenticador) obrigatória para:</div>
+        <h2 className="text-sm font-semibold text-slate-800 sm:col-span-3">Segurança</h2>
+        <div className="sm:col-span-3 text-sm text-slate-700">Verificação em duas etapas (app autenticador) obrigatória para:</div>
         {(['admin', 'gestor', 'vendedor'] as const).map((r) => (
           <label key={r} className="flex items-center gap-2 text-sm">
             <input
@@ -366,6 +371,7 @@ function SettingsTab({ editable }: { editable: boolean }) {
         ))}
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
+        <h2 className="text-sm font-semibold text-slate-800 sm:col-span-3">Cadastro de novos usuários</h2>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.signup.enabled} onChange={(e) => set('signup', 'enabled', e.target.checked)} /> Permitir "Criar conta" na tela de login</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!editable} checked={s.signup.requireApproval} onChange={(e) => set('signup', 'requireApproval', e.target.checked)} /> Novas contas precisam de aprovação do administrador</label>
         <div>
@@ -380,8 +386,9 @@ function SettingsTab({ editable }: { editable: boolean }) {
         </div>
       </section>
       <section className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
-        {numField('alerts', 'committedWithoutPostingDays', 'Alerta: pedido confirmado sem baixa após (dias)')}
-        {numField('alerts', 'staleOpportunityDays', 'Alerta: pré-pedido parado após (dias)')}
+        <h2 className="text-sm font-semibold text-slate-800 sm:col-span-3">Alertas</h2>
+        {numField('alerts', 'committedWithoutPostingDays', 'Alerta: pedido confirmado sem baixa há mais de (dias)')}
+        {numField('alerts', 'staleOpportunityDays', 'Alerta: pré-pedido parado há mais de (dias)')}
       </section>
       <ErrorMsg error={error} />
       {msg && <p className="text-sm text-emerald-700">{msg}</p>}
@@ -414,29 +421,29 @@ function SyncTab() {
       {msg && <p className="text-sm text-emerald-700">{msg}</p>}
       <section className="card overflow-hidden">
         <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Execuções</h2>
-        <Table columns={['Início', 'Recurso', 'Status', 'Itens', 'Origem', 'Erro']}>
+        <Table columns={['Início', 'Etapa', 'Resultado', 'Itens', 'Origem', 'Erro']}>
           {(data?.runs ?? []).map((r: any) => (
             <tr key={r.id}>
-              <td className="td text-xs">{dateTime(r.started_at)}</td><td className="td">{r.kind}</td>
-              <td className={`td text-xs font-semibold ${r.status === 'error' ? 'text-rose-600' : r.status === 'success' ? 'text-emerald-600' : 'text-slate-500'}`}>{r.status}</td>
-              <td className="td tabular-nums">{r.items}</td><td className="td text-xs">{r.triggered_by}</td><td className="td text-xs text-rose-700">{r.error}</td>
+              <td className="td text-xs">{dateTime(r.started_at)}</td><td className="td">{SYNC_RESOURCE[r.kind] ?? r.kind}</td>
+              <td className={`td text-xs font-semibold ${r.status === 'error' ? 'text-rose-600' : r.status === 'success' ? 'text-emerald-600' : 'text-slate-500'}`}>{SYNC_STATUS[r.status] ?? r.status}</td>
+              <td className="td tabular-nums">{r.items}</td><td className="td text-xs">{syncOrigin(r.triggered_by)}</td><td className="td text-xs text-rose-700">{r.error}</td>
             </tr>
           ))}
         </Table>
       </section>
       <section className="card overflow-hidden">
         <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Fila de processamento</h2>
-        <Table columns={['Job', 'Status', 'Tentativas', 'Próxima execução', 'Erro']}>
+        <Table columns={['Tarefa', 'Situação', 'Tentativas', 'Próxima execução', 'Erro']}>
           {(data?.jobs ?? []).map((j: any) => (
-            <tr key={j.id}><td className="td">{j.type}</td><td className="td text-xs">{j.status}</td><td className="td text-xs">{j.attempts}/{j.max_attempts}</td><td className="td text-xs">{dateTime(j.run_at)}</td><td className="td text-xs text-rose-700">{j.last_error}</td></tr>
+            <tr key={j.id}><td className="td">{JOB_TYPE[j.type] ?? j.type}</td><td className="td text-xs">{JOB_STATUS[j.status] ?? j.status}</td><td className="td text-xs">{j.attempts}/{j.max_attempts}</td><td className="td text-xs">{dateTime(j.run_at)}</td><td className="td text-xs text-rose-700">{j.last_error}</td></tr>
           ))}
         </Table>
       </section>
       <section className="card overflow-hidden">
-        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Webhooks recebidos</h2>
-        <Table columns={['Recebido', 'Evento', 'Recurso', 'Status', 'Observação']}>
+        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Avisos recebidos do Bling (webhooks)</h2>
+        <Table columns={['Recebido', 'Evento', 'Código no Bling', 'Situação', 'Observação']}>
           {(data?.webhooks ?? []).map((w: any) => (
-            <tr key={w.event_id}><td className="td text-xs">{dateTime(w.received_at)}</td><td className="td text-xs">{w.resource}.{w.action}</td><td className="td text-xs">{w.resource_id}</td><td className="td text-xs">{w.status}</td><td className="td text-xs">{w.note}</td></tr>
+            <tr key={w.event_id}><td className="td text-xs">{dateTime(w.received_at)}</td><td className="td text-xs">{w.resource}.{w.action}</td><td className="td text-xs">{w.resource_id}</td><td className="td text-xs">{WEBHOOK_STATUS[w.status] ?? w.status}</td><td className="td text-xs">{w.note}</td></tr>
           ))}
         </Table>
       </section>
@@ -451,12 +458,12 @@ function AuditTab() {
   }, []);
   return (
     <div className="card overflow-hidden">
-      <Table columns={['Quando', 'Usuário', 'Ação', 'Entidade', 'Detalhes', 'IP']}>
+      <Table columns={['Quando', 'Usuário', 'Ação', 'Item afetado', 'Detalhes', 'IP']}>
         {rows.map((a) => (
           <tr key={a.id}>
-            <td className="td text-xs">{dateTime(a.at)}</td><td className="td text-xs">{a.user_name ?? '—'}</td><td className="td text-xs font-mono">{a.action}</td>
-            <td className="td text-xs">{a.entity ? `${a.entity} ${a.entity_id ?? ''}` : '—'}</td>
-            <td className="td max-w-xs truncate text-xs" title={JSON.stringify(a.details)}>{a.details ? JSON.stringify(a.details) : ''}</td><td className="td text-xs">{a.ip}</td>
+            <td className="td text-xs">{dateTime(a.at)}</td><td className="td text-xs">{a.user_name ?? '—'}</td><td className="td text-xs" title={a.action}>{AUDIT_ACTION[a.action] ?? a.action}</td>
+            <td className="td text-xs">{auditEntity(a.entity, a.entity_id)}</td>
+            <td className="td max-w-xs truncate text-xs" title={auditDetails(a.details)}>{auditDetails(a.details)}</td><td className="td text-xs">{a.ip}</td>
           </tr>
         ))}
       </Table>

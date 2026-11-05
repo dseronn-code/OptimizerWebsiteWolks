@@ -211,14 +211,29 @@ export async function loadSyncHealth(settings: AppSettings, now: Date, db: Db = 
 export async function loadEngineInput(productId: number, settings: AppSettings, now: Date, db: Db = pool): Promise<EngineInput | null> {
   const product = await getProduct(productId, db);
   if (!product) return null;
-  const [balances, commitments, reservations, blocks, incoming, sync] = await Promise.all([
-    loadBalances(productId, db),
-    loadCommitments(productId, db),
-    loadReservations(productId, db),
-    loadBlocks(productId, db),
-    loadIncoming(productId, db),
-    loadSyncHealth(settings, now, db),
-  ]);
+  const loaders = [
+    () => loadBalances(productId, db),
+    () => loadCommitments(productId, db),
+    () => loadReservations(productId, db),
+    () => loadBlocks(productId, db),
+    () => loadIncoming(productId, db),
+    () => loadSyncHealth(settings, now, db),
+  ] as const;
+  // no pool as consultas rodam em paralelo; dentro de uma transação (um único cliente) precisam ser sequenciais
+  let results: unknown[];
+  if (db === pool) results = await Promise.all(loaders.map((f) => f()));
+  else {
+    results = [];
+    for (const f of loaders) results.push(await f());
+  }
+  const [balances, commitments, reservations, blocks, incoming, sync] = results as [
+    Awaited<ReturnType<typeof loadBalances>>,
+    Awaited<ReturnType<typeof loadCommitments>>,
+    Awaited<ReturnType<typeof loadReservations>>,
+    Awaited<ReturnType<typeof loadBlocks>>,
+    Awaited<ReturnType<typeof loadIncoming>>,
+    Awaited<ReturnType<typeof loadSyncHealth>>,
+  ];
   return {
     product: { id: product.id, sku: product.sku, name: product.name, unit: product.unit },
     balances,

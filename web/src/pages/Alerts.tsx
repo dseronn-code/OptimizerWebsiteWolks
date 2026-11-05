@@ -22,7 +22,7 @@ const TYPE_LABEL: Record<string, string> = {
   RESERVATION_EXPIRING: 'Reserva vencendo',
   RESERVATION_EXPIRED: 'Reserva vencida',
   NEGATIVE_BALANCE: 'Saldo negativo',
-  OVERCOMMITTED: 'Risco de venda acima do saldo',
+  OVERCOMMITTED: 'Pedidos acima do estoque',
   POSSIBLE_DUPLICATE: 'Possível desconto duplicado',
   CANCELLED_WITH_ACTIVE_RESERVATION: 'Cancelado com reserva ativa',
   CANCELLED_AFTER_POSTING: 'Cancelado após baixa',
@@ -59,14 +59,14 @@ export default function Alerts() {
 
   return (
     <div className="mx-auto max-w-5xl p-3 sm:p-6">
-      <PageHeader title="Alertas" subtitle="Gerados automaticamente a partir do cálculo de disponibilidade e da sincronização" />
+      <PageHeader title="Alertas" subtitle="Gerados automaticamente pelo cálculo de disponibilidade e pela sincronização com o Bling" />
       <div className="card mb-4 flex flex-wrap gap-3 p-4">
-        <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Situação do alerta">
           <option value="active">Abertos</option>
-          <option value="acknowledged">Reconhecidos</option>
+          <option value="acknowledged">Em análise</option>
           <option value="resolved">Resolvidos</option>
         </select>
-        <select className="input w-auto" value={type} onChange={(e) => setType(e.target.value)}>
+        <select className="input w-auto" value={type} onChange={(e) => setType(e.target.value)} aria-label="Tipo de alerta">
           <option value="">Todos os tipos</option>
           {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
@@ -84,8 +84,8 @@ export default function Alerts() {
               </div>
               {user?.role !== 'vendedor' && a.status !== 'resolved' && (
                 <div className="flex gap-1">
-                  {a.status === 'open' && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(a.id, 'ack')}>Reconhecer</button>}
-                  <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(a.id, 'resolve')}>Resolver</button>
+                  {a.status === 'open' && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(a.id, 'ack')} title="Marca que alguém já está verificando este alerta">Marcar em análise</button>}
+                  <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(a.id, 'resolve')} title="Encerra o alerta. Se o problema continuar, ele volta a aparecer na próxima verificação">Marcar como resolvido</button>
                 </div>
               )}
             </li>

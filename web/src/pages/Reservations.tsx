@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
 import { useAuth } from '../auth';
 import { Empty, ErrorMsg, PageHeader, Table } from '../components/ui';
-import { dateTime, num, RESERVATION_STATUS } from '../format';
+import { dateTime, num, RESERVATION_ACTION, RESERVATION_STATUS } from '../format';
 
 interface Reservation {
   id: string;
@@ -83,7 +83,7 @@ export default function Reservations() {
   const manager = user?.role !== 'vendedor';
   return (
     <div className="mx-auto max-w-6xl p-3 sm:p-6">
-      <PageHeader title="Reservas" subtitle="Reservas complementares ao Bling (não alteram o ERP). Para reservar, abra o produto e use “Solicitar reserva”." />
+      <PageHeader title="Reservas" subtitle="Reservas complementares ao Bling (não alteram o ERP). Para reservar, abra o produto (pela busca ou pela tela Estoque) e use o botão de reserva." />
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div>
           <label className="label">Situação</label>
@@ -115,10 +115,10 @@ export default function Reservations() {
                     <div className="flex flex-wrap gap-1">
                       {manager && r.status === 'PENDING' && <button className="btn-primary px-2 py-1 text-xs" onClick={() => act(r, 'approve')}>Aprovar</button>}
                       {manager && r.status === 'PENDING' && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'reject')}>Rejeitar</button>}
-                      {(own || manager) && ['ACTIVE', 'EXPIRED'].includes(r.status) && (manager || r.status === 'ACTIVE') && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'renew')}>Renovar</button>}
-                      {(own || manager) && ['PENDING', 'ACTIVE', 'EXPIRED'].includes(r.status) && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'link')}>Vincular pedido</button>}
-                      {manager && ['ACTIVE', 'EXPIRED'].includes(r.status) && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'release')}>Liberar</button>}
-                      {(own || manager) && ['PENDING', 'ACTIVE', 'EXPIRED'].includes(r.status) && <button className="btn-secondary px-2 py-1 text-xs text-rose-600" onClick={() => act(r, 'cancel')}>Cancelar</button>}
+                      {(own || manager) && ['ACTIVE', 'EXPIRED'].includes(r.status) && (manager || r.status === 'ACTIVE') && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'renew')} title="Estende o prazo de validade da reserva">Renovar</button>}
+                      {(own || manager) && ['PENDING', 'ACTIVE', 'EXPIRED'].includes(r.status) && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'link')} title="Liga a reserva ao pedido do Bling, para as unidades não serem descontadas duas vezes">Vincular pedido</button>}
+                      {manager && ['ACTIVE', 'EXPIRED'].includes(r.status) && <button className="btn-secondary px-2 py-1 text-xs" onClick={() => act(r, 'release')} title="Encerra a reserva e devolve as unidades ao disponível para venda">Liberar</button>}
+                      {(own || manager) && ['PENDING', 'ACTIVE', 'EXPIRED'].includes(r.status) && <button className="btn-secondary px-2 py-1 text-xs text-rose-600" onClick={() => act(r, 'cancel')} title="Cancela a reserva (por exemplo, o cliente desistiu)">Cancelar</button>}
                       <button className="px-2 py-1 text-xs text-slate-500 underline" onClick={() => showHistory(r.id)}>Histórico</button>
                     </div>
                   </td>
@@ -135,7 +135,7 @@ export default function Reservations() {
             <ul className="space-y-2 text-sm">
               {history.items.map((h) => (
                 <li key={h.id} className="border-l-2 border-brand-200 pl-3">
-                  <div className="font-medium">{h.action} {h.from_status ? `${RESERVATION_STATUS[h.from_status] ?? h.from_status} → ` : ''}{RESERVATION_STATUS[h.to_status] ?? h.to_status ?? ''}</div>
+                  <div className="font-medium">{RESERVATION_ACTION[h.action] ?? h.action}: {h.from_status ? `${RESERVATION_STATUS[h.from_status] ?? h.from_status} → ` : ''}{RESERVATION_STATUS[h.to_status] ?? h.to_status ?? ''}</div>
                   <div className="text-xs text-slate-500">{dateTime(h.at)} · {h.user_name ?? 'sistema'}{h.details?.reason ? ` · ${h.details.reason}` : ''}</div>
                 </li>
               ))}

@@ -22,7 +22,7 @@ export default function History() {
             <li key={i.id} className="p-4">
               <button className="w-full text-left" onClick={() => setOpen(open === i.id ? null : i.id)}>
                 <div className="text-sm font-medium text-slate-900">{i.question}</div>
-                <div className="text-xs text-slate-500">{dateTime(i.created_at)}{user?.role !== 'vendedor' && ` · ${i.user_name}`} · {i.engine === 'llm' ? 'IA' : 'interpretador local'}</div>
+                <div className="text-xs text-slate-500">{dateTime(i.created_at)}{user?.role !== 'vendedor' && ` · ${i.user_name}`} · {i.engine === 'llm' ? 'IA' : 'respostas do sistema'}</div>
               </button>
               {open === i.id && <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-sans text-sm text-slate-700">{i.answer}</pre>}
             </li>

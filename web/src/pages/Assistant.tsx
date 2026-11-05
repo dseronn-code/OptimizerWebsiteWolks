@@ -17,16 +17,14 @@ interface Message {
 }
 
 const SUGGESTIONS = [
-  'Temos 50 unidades do produto ABC disponíveis para vender agora?',
-  'Por que aparecem 150 unidades no Bling, mas somente 70 disponíveis no ABC?',
-  'Quais pedidos estão prendendo o estoque desse produto?',
-  'Quais pré-pedidos aguardam transportadora?',
-  'O que o cliente João tem reservado?',
+  'Quais produtos estão disponíveis para venda?',
+  'O que está sem estoque?',
+  'Quais pedidos em aberto estão prendendo estoque?',
   'Quais produtos têm divergências?',
   'Quais reservas estão vencendo?',
-  'Tem alguma entrada prevista para amanhã?',
-  'Quanto teremos disponível se o cliente cancelar o pedido 1201?',
-];
+  'Quais produtos têm entrada prevista?',
+  'Quais produtos estão com saldo negativo no Bling?',
+]
 
 const STORAGE_KEY = 'bsa-chat';
 
@@ -117,7 +115,7 @@ export default function Assistant() {
         <div className="flex gap-2">
           <input
             className="input py-2.5 text-base"
-            placeholder='Ex.: "Consigo vender 35 peças do ABC agora?"'
+            placeholder="Digite sua pergunta sobre o estoque…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             maxLength={1000}
@@ -127,7 +125,7 @@ export default function Assistant() {
         </div>
         {messages.length > 0 && (
           <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-            {SUGGESTIONS.slice(2, 8).map((s) => (
+            {SUGGESTIONS.map((s) => (
               <button type="button" key={s} onClick={() => ask(s)} className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-brand-50">
                 {s}
               </button>
@@ -236,8 +234,8 @@ function ProductSearch() {
 function EngineBadge({ engine, model, fallbackReason }: { engine: 'llm' | 'local'; model?: string; fallbackReason?: string }) {
   if (engine === 'llm') {
     return (
-      <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-        <Sparkles size={12} /> Resposta da IA{model ? ` · ${model}` : ''}
+      <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700" title={model}>
+        <Sparkles size={12} /> Resposta da IA
       </div>
     );
   }

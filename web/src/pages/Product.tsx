@@ -1,6 +1,6 @@
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, qs } from '../api';
 import { useAuth } from '../auth';
 import AvailabilityCard from '../components/AvailabilityCard';
@@ -11,6 +11,7 @@ import type { Availability, SaleCheck } from '../types';
 export default function Product() {
   const { id } = useParams();
   const { user } = useAuth();
+  const nav = useNavigate();
   const [data, setData] = useState<Availability | null>(null);
   const [sale, setSale] = useState<SaleCheck | null>(null);
   const [qty, setQty] = useState('');
@@ -49,7 +50,7 @@ export default function Product() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"><ArrowLeft size={16} /> Assistente</Link>
+        <button type="button" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/estoque'))} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"><ArrowLeft size={16} /> Voltar</button>
         <button className="btn-secondary" onClick={() => load({ refresh: true })} disabled={loading}>
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar do Bling
         </button>
@@ -81,7 +82,7 @@ export default function Product() {
       {data.kit && (
         <section className="card overflow-hidden">
           <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Componentes do kit</h2>
-          <Table columns={['Componente', 'Qtd por kit', 'Disponível', 'Status']}>
+          <Table columns={['Componente', 'Qtd por kit', 'Disponível', 'Situação']}>
             {data.kit.components.map((c) => (
               <tr key={c.componentId}>
                 <td className="td"><Link className="text-brand-600 hover:underline" to={`/produtos/${c.componentId}`}>{c.sku} · {c.name}</Link></td>

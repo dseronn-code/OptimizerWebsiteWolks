@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
 import { ErrorMsg, PageHeader, Table, Tile } from '../components/ui';
-import { CATEGORY_LABEL, date, dateTime, num, RESERVATION_STATUS } from '../format';
+import { CATEGORY_LABEL, date, dateTime, num, RESERVATION_ACTION, RESERVATION_STATUS } from '../format';
 
 interface Row { id: number; sku: string | null; name: string; physical: number | null; virtual: number | null; openOrders: number; available: number | null; availableForSale: number; status: string; issues: string[] }
 interface Dash {
@@ -55,28 +55,28 @@ export default function Dashboard() {
       <div className="card grid gap-3 p-4 sm:grid-cols-3">
         <div>
           <label className="label">Depósito</label>
-          <select className="input" value={depositId} onChange={(e) => setDepositId(e.target.value)}>
+          <select className="input" aria-label="Depósito" value={depositId} onChange={(e) => setDepositId(e.target.value)}>
             <option value="">Todos</option>
             {deposits.filter((d) => !d.ignore_balance).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
-        <div className="sm:col-span-2"><label className="label">Produto</label><input className="input" placeholder="Nome ou SKU" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="sm:col-span-2"><label className="label">Produto</label><input className="input" aria-label="Produto" placeholder="Nome ou SKU" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
       <ErrorMsg error={error} />
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Tile label="Disponibilidade confirmada" value={`${data.products.confirmed} / ${data.products.total}`} tone="good" />
-            <Tile label="Não confirmada" value={data.products.unconfirmed} tone={data.products.unconfirmed ? 'warn' : 'default'} />
-            <Tile label="Com divergência" value={data.divergent.length} tone={data.divergent.length ? 'bad' : 'default'} />
+            <Tile label="Produtos confirmados" value={`${num(data.products.confirmed)} / ${num(data.products.total)}`} tone="good" hint="Produtos com disponibilidade confirmada, do total do catálogo" />
+            <Tile label="Produtos não confirmados" hint="A disponibilidade depende de revisão (dados desatualizados, situação sem regra, possível duplicidade…)" value={data.products.unconfirmed} tone={data.products.unconfirmed ? 'warn' : 'default'} />
+            <Tile label="Produtos com divergência" value={data.divergent.length} tone={data.divergent.length ? 'bad' : 'default'} />
             <Tile label="Pedidos acima do estoque" value={data.atRisk.length} tone={data.atRisk.length ? 'bad' : 'default'} hint="Produtos em que os pedidos em aberto somam mais do que o estoque" />
-            <Tile label="Pedidos pagos/confirmados" value={`${byCategory('COMMITTED').orders} (${num(byCategory('COMMITTED').units)} un)`} />
-            <Tile label="Pré-pedidos com reserva" value={`${byCategory('PRE_ORDER_RESERVED').orders} (${num(byCategory('PRE_ORDER_RESERVED').units)} un)`} />
-            <Tile label="Reservas ativas / vencendo" value={`${data.reservations.active} / ${data.reservations.expiring}`} tone={data.reservations.expiring ? 'warn' : 'default'} />
-            <Tile label="Reservas vencidas / pendentes" value={`${data.reservations.expired} / ${data.reservations.pending}`} tone={data.reservations.expired ? 'warn' : 'default'} />
+            <Tile label="Pedidos confirmados sem baixa" value={`${byCategory('COMMITTED').orders} (${num(byCategory('COMMITTED').units)} un.)`} hint="Pedidos pagos/confirmados ainda não baixados no Bling: prendem estoque" />
+            <Tile label="Pré-pedidos com reserva" value={`${byCategory('PRE_ORDER_RESERVED').orders} (${num(byCategory('PRE_ORDER_RESERVED').units)} un.)`} />
+            <Tile label="Reservas ativas / vencendo" hint="Vencendo = vencem nas próximas horas configuradas em Parâmetros" value={`${data.reservations.active} / ${data.reservations.expiring}`} tone={data.reservations.expiring ? 'warn' : 'default'} />
+            <Tile label="Reservas vencidas / aguardando aprovação" value={`${data.reservations.expired} / ${data.reservations.pending}`} tone={data.reservations.expired ? 'warn' : 'default'} />
             <Tile label="Alertas críticos" value={alertCount('critical')} tone={alertCount('critical') ? 'bad' : 'default'} />
             <Tile label="Alertas de atenção" value={alertCount('warning')} tone={alertCount('warning') ? 'warn' : 'default'} />
-            <Tile label="Falhas de sincronização (7d)" value={data.syncFailures.length} tone={data.syncFailures.length ? 'bad' : 'default'} />
+            <Tile label="Falhas de sincronização (7 dias)" value={data.syncFailures.length} tone={data.syncFailures.length ? 'bad' : 'default'} />
           </div>
 
           {data.virtualCheck.checked > 0 && <VirtualCheck check={data.virtualCheck} />}
@@ -89,7 +89,7 @@ export default function Dashboard() {
                 <h2 className="text-sm font-semibold">Pedidos parados há mais de {data.recentCommitted.days} dias (prendem estoque)</h2>
                 <p className="text-xs text-slate-500">
                   Confira se ainda vão ser entregues. Se já foram entregues ou o cliente desistiu, atualize a situação no Bling (Atendido ou Cancelado) para liberar o estoque.
-                  {data.recentCommitted.orders > 0 && <> Além destes, {data.recentCommitted.orders} pedido(s) recente(s) ({num(Number(data.recentCommitted.units))} un.) também prendem estoque — normal, dentro do prazo.</>}
+                  {data.recentCommitted.orders > 0 && <> Além destes, {data.recentCommitted.orders === 1 ? '1 pedido recente' : `${num(data.recentCommitted.orders)} pedidos recentes`} ({num(Number(data.recentCommitted.units))} un.) também {data.recentCommitted.orders === 1 ? 'prende' : 'prendem'} estoque — normal, dentro do prazo.</>}
                 </p>
               </div>
               <Table columns={['Pedido', 'Data', 'Há', 'Cliente', 'Situação', 'Itens', 'Unidades']}>
@@ -121,7 +121,7 @@ export default function Dashboard() {
             </section>
             <section className="card overflow-hidden">
               <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Quantidade comprometida por vendedor</h2>
-              <Table columns={['Vendedor', 'Pedidos (un)', 'Reservas (un)']}>
+              <Table columns={['Vendedor', 'Em pedidos (un.)', 'Em reservas (un.)']}>
                 {[...new Set([...data.committedBySeller.orders.map((o) => o.seller), ...data.committedBySeller.reservations.map((r) => r.seller)])].map((s) => (
                   <tr key={s}>
                     <td className="td">{s}</td>
@@ -139,7 +139,7 @@ export default function Dashboard() {
               {data.recentReservationChanges.map((h, i) => (
                 <tr key={i}>
                   <td className="td text-xs">{dateTime(h.at)}</td><td className="td">{h.sku}</td><td className="td">{h.customer_name}</td><td className="td tabular-nums">{num(h.quantity)}</td>
-                  <td className="td text-xs">{h.action}{h.to_status ? ` → ${RESERVATION_STATUS[h.to_status] ?? h.to_status}` : ''}</td><td className="td text-xs">{h.user_name ?? 'sistema'}</td>
+                  <td className="td text-xs">{RESERVATION_ACTION[h.action] ?? h.action}{h.to_status ? ` → ${RESERVATION_STATUS[h.to_status] ?? h.to_status}` : ''}</td><td className="td text-xs">{h.user_name ?? 'sistema'}</td>
                 </tr>
               ))}
             </Table>
@@ -206,7 +206,7 @@ function VirtualCheck({ check }: { check: Dash['virtualCheck'] }) {
     <section className={`card p-4 text-sm ${ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
       <h2 className="font-semibold text-slate-900">Conferência com o saldo virtual do Bling</h2>
       <p className="mt-1 text-slate-700">
-        De <b>{check.checked}</b> produto(s) com pedidos em aberto, <b>{check.matching}</b> batem exatamente com o que o Bling reserva
+        De <b>{check.checked}</b> {check.checked === 1 ? 'produto' : 'produtos'} com pedidos em aberto, <b>{check.matching}</b> batem exatamente com o que o Bling reserva
         (físico − virtual = pedidos em aberto).
         {noRes > 0 && <> Em <b>{noRes}</b>, o Bling <b>não</b> reserva nada (virtual = físico).</>}
       </p>

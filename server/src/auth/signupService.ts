@@ -151,7 +151,7 @@ export async function verifySignup(verificationId: string, code: string, ip: str
     return { status: 'active', userId, username: v.email };
   }).then((r: any) => {
     if (r?.status === 'wrong') {
-      throw new SignupError(r.left > 0 ? `Código incorreto. Restam ${r.left} tentativa(s).` : 'Código incorreto. Toque em "Reenviar código" para receber outro.', 400);
+      throw new SignupError(r.left > 0 ? `Código incorreto. ${r.left === 1 ? 'Resta 1 tentativa' : `Restam ${r.left} tentativas`}.` : 'Código incorreto. Toque em "Reenviar código" para receber outro.', 400);
     }
     return r as VerifyResult;
   });

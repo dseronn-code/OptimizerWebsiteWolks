@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
 import { ErrorMsg, PageHeader, Tile } from '../components/ui';
-import { dateTime, num } from '../format';
+import { dateTime, num, plural } from '../format';
 
 interface Row {
   id: number;
@@ -159,8 +159,8 @@ export default function Stock() {
       {data && (data.totals.negativeProducts > 0 || data.totals.virtualKits > 0) && (
         <p className="text-xs text-slate-500">
           Disponível = físico − comprometido, produto a produto.
-          {data.totals.negativeProducts > 0 && <> {num(data.totals.negativeProducts)} produto(s) estão com saldo negativo no Bling (somando {num(data.totals.negative)} un.): eles contam como 0 disponível e não entram no físico acima.</>}
-          {data.totals.virtualKits > 0 && <> {num(data.totals.virtualKits)} kit(s) calculados pelos componentes não entram nos totais, para as mesmas peças não serem contadas duas vezes.</>}
+          {data.totals.negativeProducts > 0 && <> {data.totals.negativeProducts === 1 ? '1 produto está' : `${num(data.totals.negativeProducts)} produtos estão`} com saldo negativo no Bling (somando {num(data.totals.negative)} un.): {data.totals.negativeProducts === 1 ? 'ele conta' : 'eles contam'} como 0 disponível e não {data.totals.negativeProducts === 1 ? 'entra' : 'entram'} no físico acima.</>}
+          {data.totals.virtualKits > 0 && <> {data.totals.virtualKits === 1 ? '1 kit calculado pelos componentes não entra' : `${num(data.totals.virtualKits)} kits calculados pelos componentes não entram`} nos totais, para as mesmas peças não serem contadas duas vezes.</>}
         </p>
       )}
 
@@ -211,7 +211,7 @@ export default function Stock() {
       {data && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
           <span>
-            Página {data.page} de {pages} · {num(data.totals.products)} produto(s)
+            Página {data.page} de {pages} · {plural(data.totals.products, 'produto', 'produtos')}
             {data.rows[0]?.fetchedAt && <> · saldos de {dateTime(data.rows[0].fetchedAt)}</>}
           </span>
           <div className="flex gap-2">

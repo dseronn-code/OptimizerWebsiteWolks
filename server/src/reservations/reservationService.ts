@@ -3,6 +3,7 @@ import { audit } from '../audit/audit.js';
 import { pool, withTransaction } from '../db/pool.js';
 import { upsertAlert } from '../alerts/alertService.js';
 import { calculateAvailability } from '../engine/availability.js';
+import { pl } from '../lib/labels.js';
 import { getSettings } from '../lib/settings.js';
 import { loadEngineInput } from '../stock/repository.js';
 import type { Viewer } from '../stock/stockService.js';
@@ -200,7 +201,7 @@ export async function expireReservations(): Promise<{ expired: number; converted
       await upsertAlert({
         type: 'RESERVATION_EXPIRED', severity: 'warning', dedupeKey: `reservation_expired:${r.id}`, reservationId: r.id,
         productId: r.product_id, userId: r.seller_user_id,
-        message: `Reserva de ${r.quantity} unidade(s) para ${r.customer_name ?? 'cliente'} venceu — renove ou libere.`,
+        message: `Reserva de ${pl(r.quantity, 'unidade', 'unidades')} para ${r.customer_name ?? 'cliente'} venceu — renove ou libere.`,
       }, tx);
     }
     return rows.length;
