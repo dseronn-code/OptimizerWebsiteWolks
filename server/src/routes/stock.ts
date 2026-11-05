@@ -98,12 +98,20 @@ export async function stockRoutes(app: FastifyInstance) {
         }
         t.committed += r.committed;
         t.availableForSale += r.availableForSale;
+        // pedidos além do estoque: o produto fica com 0 disponível (nunca negativo), então
+        // a soma do disponível não é exatamente físico − comprometido; a diferença é esta falta
+        const uncovered = r.committed - Math.max(0, phys);
+        if (uncovered > 0.00001) {
+          t.uncovered += uncovered;
+          t.uncoveredProducts += 1;
+        }
         return t;
       },
-      { products: 0, physical: 0, negative: 0, negativeProducts: 0, committed: 0, availableForSale: 0, virtualKits: 0 },
+      { products: 0, physical: 0, negative: 0, negativeProducts: 0, committed: 0, availableForSale: 0, virtualKits: 0, uncovered: 0, uncoveredProducts: 0 },
     );
     const counts = Object.fromEntries(FILTERS.map((f) => [f, all.filter((r) => matches(r, f)).length]));
     const start = (q.page - 1) * q.pageSize;
+    totals.uncovered = Math.round(totals.uncovered * 10000) / 10000;
     return send(reply, { totals, counts, page: q.page, pageSize: q.pageSize, rows: rows.slice(start, start + q.pageSize) });
   });
 }

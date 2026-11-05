@@ -20,7 +20,7 @@ interface Row {
 }
 
 interface Resp {
-  totals: { products: number; physical: number; negative: number; negativeProducts: number; committed: number; availableForSale: number; virtualKits: number };
+  totals: { products: number; physical: number; negative: number; negativeProducts: number; committed: number; availableForSale: number; virtualKits: number; uncovered: number; uncoveredProducts: number };
   counts: Record<string, number>;
   page: number;
   pageSize: number;
@@ -156,9 +156,10 @@ export default function Stock() {
         </div>
       )}
 
-      {data && (data.totals.negativeProducts > 0 || data.totals.virtualKits > 0) && (
+      {data && (data.totals.negativeProducts > 0 || data.totals.virtualKits > 0 || data.totals.uncoveredProducts > 0) && (
         <p className="text-xs text-slate-500">
-          Disponível = físico − comprometido, produto a produto.
+          Disponível = físico − comprometido, produto a produto, nunca abaixo de zero.
+          {data.totals.uncoveredProducts > 0 && <> Em {data.totals.uncoveredProducts === 1 ? '1 produto' : `${num(data.totals.uncoveredProducts)} produtos`}, os pedidos e reservas superam o estoque em {num(data.totals.uncovered)} un. (veja o filtro "Comprometidos"): {data.totals.uncoveredProducts === 1 ? 'ele fica' : 'eles ficam'} com 0 disponível, por isso o total disponível é {num(data.totals.uncovered)} un. maior que físico − comprometido.</>}
           {data.totals.negativeProducts > 0 && <> {data.totals.negativeProducts === 1 ? '1 produto está' : `${num(data.totals.negativeProducts)} produtos estão`} com saldo negativo no Bling (somando {num(data.totals.negative)} un.): {data.totals.negativeProducts === 1 ? 'ele conta' : 'eles contam'} como 0 disponível e não {data.totals.negativeProducts === 1 ? 'entra' : 'entram'} no físico acima.</>}
           {data.totals.virtualKits > 0 && <> {data.totals.virtualKits === 1 ? '1 kit calculado pelos componentes não entra' : `${num(data.totals.virtualKits)} kits calculados pelos componentes não entram`} nos totais, para as mesmas peças não serem contadas duas vezes.</>}
         </p>
