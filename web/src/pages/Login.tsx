@@ -23,17 +23,49 @@ export default function Login() {
   }, []);
 
   return (
-    <div className="flex min-h-full flex-col bg-brand-900">
-      <div className="h-1.5 bg-brand-600" />
-      <div className="flex flex-1 items-center justify-center p-4">
-        <div className="card w-full max-w-sm space-y-4 p-6">
-          <div className="flex flex-col items-center gap-2 pb-2 text-center">
-            <img src={BRAND.logo} alt={BRAND.company} className="h-12 w-auto" />
+    <div className="flex min-h-full bg-white">
+      {/* painel da marca (somente telas grandes) */}
+      <div className="relative hidden w-[46%] max-w-2xl flex-col justify-between overflow-hidden bg-brand-950 p-12 text-white lg:flex">
+        <div className="pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-brand-500/30 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-40 right-[-6rem] h-[30rem] w-[30rem] rounded-full bg-accent-500/15 blur-3xl" aria-hidden />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{ backgroundImage: 'linear-gradient(rgb(255 255 255) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255) 1px, transparent 1px)', backgroundSize: '44px 44px' }}
+          aria-hidden
+        />
+        <img src={BRAND.logoOnDark} alt={BRAND.company} className="relative h-10 w-auto self-start" />
+        <div className="relative max-w-md animate-fade-up">
+          <span className="chip bg-white/10 text-brand-100 ring-white/15"><ShieldCheck size={13} /> Somente leitura no Bling</span>
+          <h2 className="mt-5 text-4xl font-bold leading-tight tracking-tight">
+            O estoque real,<br />
+            <span className="bg-gradient-to-r from-accent-500 to-brand-200 bg-clip-text text-transparent">pronto para vender.</span>
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-brand-100/80">
+            Saldo do Bling menos pedidos, reservas e bloqueios ainda não baixados, sem contar nada duas vezes. Pergunte em linguagem natural e receba a resposta com o cálculo.
+          </p>
+          <ul className="mt-8 space-y-3 text-sm text-brand-100/90">
+            {['Disponibilidade confirmada produto a produto', 'Assistente com IA para a equipe comercial', 'Alertas de divergência e reservas vencendo'].map((t) => (
+              <li key={t} className="flex items-center gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/15"><ShieldCheck size={13} /></span>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative text-xs text-brand-300/70">© {new Date().getFullYear()} {BRAND.company} · uso interno</p>
+      </div>
+
+      {/* formulário */}
+      <div className="flex flex-1 flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-white px-5 py-10">
+        <div className="w-full max-w-sm animate-fade-up space-y-6">
+          <div className="flex flex-col items-center gap-3 text-center lg:items-start lg:text-left">
+            <img src={BRAND.logo} alt={BRAND.company} className="h-11 w-auto lg:hidden" />
             <div>
-              <h1 className="text-base font-semibold text-brand-900">{BRAND.appName}</h1>
-              <p className="text-xs text-slate-500">{BRAND.tagline}</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{BRAND.appName}</h1>
+              <p className="mt-1 text-sm text-slate-500">{BRAND.tagline}</p>
             </div>
           </div>
+          <div className="card space-y-4 p-6 sm:p-7">
           {mode === 'login' && (
             <LoginForm
               canSignup={Boolean(signup?.enabled)}
@@ -68,15 +100,16 @@ export default function Login() {
               <button className="btn-secondary w-full" onClick={() => setMode('login')}>Voltar para o login</button>
             </div>
           )}
+          </div>
+          <p className="text-center text-xs text-slate-400 lg:hidden">{BRAND.company} · uso interno</p>
         </div>
       </div>
-      <p className="pb-4 text-center text-xs text-brand-200">{BRAND.company} · uso interno</p>
     </div>
   );
 }
 
 function ErrorBox({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{children}</p>;
+  return <p className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">{children}</p>;
 }
 
 function LoginForm({ canSignup, onSignup, onMfa }: { canSignup: boolean; onSignup: () => void; onMfa: (step: 'verify' | 'setup', challenge: string) => void }) {

@@ -48,7 +48,7 @@ export default function Product() {
   const deposits = Object.fromEntries(data.byDeposit.map((d) => [d.depositId, d.depositName]));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-6">
+    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-8 sm:py-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/estoque'))} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"><ArrowLeft size={16} /> Voltar</button>
         <button className="btn-secondary" onClick={() => load({ refresh: true })} disabled={loading}>
@@ -81,7 +81,7 @@ export default function Product() {
 
       {data.kit && (
         <section className="card overflow-hidden">
-          <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Componentes do kit</h2>
+          <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Componentes do kit</h2>
           <Table columns={['Componente', 'Qtd por kit', 'Disponível', 'Situação']}>
             {data.kit.components.map((c) => (
               <tr key={c.componentId}>
@@ -96,7 +96,7 @@ export default function Product() {
       )}
 
       <section className="card overflow-hidden">
-        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Visão por depósito</h2>
+        <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Visão por depósito</h2>
         <Table columns={['Depósito', 'Físico', 'Virtual', 'Descontos', 'Disponível', 'Atualizado']}>
           {data.byDeposit.map((d) => {
             const ded = d.deductions.committedOrders + d.deductions.preOrderReservations + d.deductions.localReservations + d.deductions.blocked + d.deductions.uncertain;
@@ -115,7 +115,7 @@ export default function Product() {
       </section>
 
       <section className="card overflow-hidden">
-        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Como o disponível foi calculado</h2>
+        <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Como o disponível foi calculado</h2>
         <p className="px-4 pt-3 text-sm text-slate-600">
           Base: {data.baseMode === 'PHYSICAL' ? 'estoque físico' : 'saldo virtual'} = <b>{num(data.base)}</b> − compromissos subtraídos <b>{num(data.totalDeducted)}</b> ={' '}
           <b>{num(data.available)}</b>. Cada compromisso é contado uma única vez; os que já foram baixados no Bling não são subtraídos de novo.
@@ -146,7 +146,7 @@ export default function Product() {
 
       {data.incoming.length > 0 && (
         <section className="card overflow-hidden">
-          <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Entradas previstas (não contam no disponível)</h2>
+          <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Entradas previstas (não contam no disponível)</h2>
           <Table columns={['Pedido de compra', 'Fornecedor', 'Previsão', 'Quantidade']}>
             {data.incoming.map((e) => (
               <tr key={e.purchaseOrderId}>

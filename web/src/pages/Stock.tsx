@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Download, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, Boxes, CircleCheckBig, Download, Lock, Package, Search, Warehouse } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -111,8 +111,9 @@ export default function Stock() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-6">
+    <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader
+        icon={Boxes}
         title="Estoque"
         subtitle="Todos os produtos: estoque físico do Bling, o que já está comprometido em pedidos e o disponível para vender"
         actions={
@@ -138,7 +139,7 @@ export default function Stock() {
             <button
               key={k}
               onClick={() => { setFilter(k); setPage(1); }}
-              className={`rounded-full px-3 py-1 text-sm ring-1 ${filter === k ? 'bg-brand-600 text-white ring-brand-600' : 'bg-white text-slate-700 ring-slate-200 hover:bg-brand-50'}`}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition ${filter === k ? 'bg-brand-600 text-white shadow-[var(--shadow-glow)] ring-brand-600' : 'bg-white text-slate-600 ring-slate-200 hover:bg-brand-50 hover:text-brand-700 hover:ring-brand-200'}`}
             >
               {label}
               {data?.counts[k] !== undefined && <span className={`ml-1 text-xs ${filter === k ? 'text-brand-100' : 'text-slate-400'}`}>{num(data.counts[k])}</span>}
@@ -148,16 +149,16 @@ export default function Stock() {
       </div>
 
       {data && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Tile label="Produtos" value={num(data.totals.products)} tone="muted" />
-          <Tile label="Físico em estoque (Bling)" value={num(data.totals.physical)} tone="muted" />
-          <Tile label="Comprometido (pedidos e reservas)" value={num(data.totals.committed)} />
-          <Tile label="Disponível para venda" value={num(data.totals.availableForSale)} tone="good" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Tile label="Produtos" value={num(data.totals.products)} tone="brand" icon={Package} />
+          <Tile label="Físico em estoque (Bling)" value={num(data.totals.physical)} tone="muted" icon={Warehouse} />
+          <Tile label="Comprometido (pedidos e reservas)" value={num(data.totals.committed)} tone="warn" icon={Lock} />
+          <Tile label="Disponível para venda" value={num(data.totals.availableForSale)} tone="good" icon={CircleCheckBig} />
         </div>
       )}
 
       {data && (data.totals.negativeProducts > 0 || data.totals.virtualKits > 0 || data.totals.uncoveredProducts > 0) && (
-        <p className="text-xs text-slate-500">
+        <p className="rounded-xl bg-white/60 px-4 py-3 text-xs leading-relaxed text-slate-500 ring-1 ring-slate-200/70">
           Disponível = físico − comprometido, produto a produto, nunca abaixo de zero.
           {data.totals.uncoveredProducts > 0 && <> Em {data.totals.uncoveredProducts === 1 ? '1 produto' : `${num(data.totals.uncoveredProducts)} produtos`}, os pedidos e reservas superam o estoque em {num(data.totals.uncovered)} un. (veja o filtro "Comprometidos"): {data.totals.uncoveredProducts === 1 ? 'ele fica' : 'eles ficam'} com 0 disponível, por isso o total disponível é {num(data.totals.uncovered)} un. maior que físico − comprometido.</>}
           {data.totals.negativeProducts > 0 && <> {data.totals.negativeProducts === 1 ? '1 produto está' : `${num(data.totals.negativeProducts)} produtos estão`} com saldo negativo no Bling (somando {num(data.totals.negative)} un.): {data.totals.negativeProducts === 1 ? 'ele conta' : 'eles contam'} como 0 disponível e não {data.totals.negativeProducts === 1 ? 'entra' : 'entram'} no físico acima.</>}
@@ -192,10 +193,11 @@ export default function Stock() {
               <td className="td text-right tabular-nums text-slate-500">{r.incoming ? num(r.incoming) : '—'}</td>
               <td className="td text-xs">
                 {r.status === 'CONFIRMED' ? (
-                  <span className="text-emerald-700">Confirmado</span>
+                  <span className="chip bg-emerald-50 text-emerald-700 ring-emerald-200">Confirmado</span>
                 ) : (
-                  <span className="text-amber-700" title={r.issues.map((i) => ISSUE_LABEL[i] ?? i).join(', ')}>
-                    Não confirmado{r.issues.length ? `: ${r.issues.map((i) => ISSUE_LABEL[i] ?? i).filter(Boolean).slice(0, 2).join(', ')}` : ''}
+                  <span className="flex flex-col items-start gap-1" title={r.issues.map((i) => ISSUE_LABEL[i] ?? i).join(', ')}>
+                    <span className="chip bg-amber-50 text-amber-800 ring-amber-200">Não confirmado</span>
+                    {r.issues.length > 0 && <span className="text-[11px] leading-snug text-slate-500">{r.issues.map((i) => ISSUE_LABEL[i] ?? i).filter(Boolean).slice(0, 2).join(' · ')}</span>}
                   </span>
                 )}
               </td>

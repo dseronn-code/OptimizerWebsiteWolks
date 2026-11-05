@@ -1,3 +1,4 @@
+import { History as HistoryIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -14,8 +15,8 @@ export default function History() {
     api.get<{ history: Item[] }>('/api/history?limit=100').then((r) => setItems(r.history)).catch(() => undefined);
   }, []);
   return (
-    <div className="mx-auto max-w-4xl p-3 sm:p-6">
-      <PageHeader title="Histórico de consultas" subtitle={user?.role === 'vendedor' ? 'Suas últimas perguntas' : 'Últimas perguntas da equipe'} />
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-8">
+      <PageHeader icon={HistoryIcon} title="Histórico de consultas" subtitle={user?.role === 'vendedor' ? 'Suas últimas perguntas' : 'Últimas perguntas da equipe'} />
       {items.length === 0 ? <Empty>Nenhuma consulta ainda.</Empty> : (
         <ul className="card divide-y divide-slate-100">
           {items.map((i) => (

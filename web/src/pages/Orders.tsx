@@ -1,3 +1,4 @@
+import { ClipboardList } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -35,8 +36,8 @@ export default function Orders() {
 
   const manager = user?.role !== 'vendedor';
   return (
-    <div className="mx-auto max-w-6xl p-3 sm:p-6">
-      <PageHeader title="Compromissos comerciais" subtitle="Pedidos do Bling em aberto e como cada um afeta o estoque" />
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
+      <PageHeader icon={ClipboardList} title="Compromissos comerciais" subtitle="Pedidos do Bling em aberto e como cada um afeta o estoque" />
       <div className="card mb-4 grid gap-3 p-4 sm:grid-cols-4">
         <div>
           <label className="label">Situação comercial</label>

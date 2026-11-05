@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { BarChart3, Bookmark, CalendarClock, CircleCheckBig, CircleHelp, GitCompareArrows, Hourglass, RefreshCw, ShoppingCart, Siren, TrendingDown, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -46,8 +46,9 @@ export default function Dashboard() {
   const byCategory = (c: string) => (data?.orders ?? []).filter((o) => o.category === c).reduce((s, o) => ({ orders: s.orders + o.orders, units: s.units + Number(o.units) }), { orders: 0, units: 0 });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-6">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader
+        icon={BarChart3}
         title="Painel de gestão"
         subtitle="Visão consolidada de disponibilidade, compromissos e riscos"
         actions={<button className="btn-secondary" onClick={load} disabled={loading}><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar</button>}
@@ -66,17 +67,17 @@ export default function Dashboard() {
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Tile label="Produtos confirmados" value={`${num(data.products.confirmed)} / ${num(data.products.total)}`} tone="good" hint="Produtos com disponibilidade confirmada, do total do catálogo" />
-            <Tile label="Produtos não confirmados" hint="A disponibilidade depende de revisão (dados desatualizados, situação sem regra, possível duplicidade…)" value={data.products.unconfirmed} tone={data.products.unconfirmed ? 'warn' : 'default'} />
-            <Tile label="Produtos com divergência" value={data.divergent.length} tone={data.divergent.length ? 'bad' : 'default'} />
-            <Tile label="Pedidos acima do estoque" value={data.atRisk.length} tone={data.atRisk.length ? 'bad' : 'default'} hint="Produtos em que os pedidos em aberto somam mais do que o estoque" />
-            <Tile label="Pedidos confirmados sem baixa" value={`${byCategory('COMMITTED').orders} (${num(byCategory('COMMITTED').units)} un.)`} hint="Pedidos pagos/confirmados ainda não baixados no Bling: prendem estoque" />
-            <Tile label="Pré-pedidos com reserva" value={`${byCategory('PRE_ORDER_RESERVED').orders} (${num(byCategory('PRE_ORDER_RESERVED').units)} un.)`} />
-            <Tile label="Reservas ativas / vencendo" hint="Vencendo = vencem nas próximas horas configuradas em Parâmetros" value={`${data.reservations.active} / ${data.reservations.expiring}`} tone={data.reservations.expiring ? 'warn' : 'default'} />
-            <Tile label="Reservas vencidas / aguardando aprovação" value={`${data.reservations.expired} / ${data.reservations.pending}`} tone={data.reservations.expired ? 'warn' : 'default'} />
-            <Tile label="Alertas críticos" value={alertCount('critical')} tone={alertCount('critical') ? 'bad' : 'default'} />
-            <Tile label="Alertas de atenção" value={alertCount('warning')} tone={alertCount('warning') ? 'warn' : 'default'} />
-            <Tile label="Falhas de sincronização (7 dias)" value={data.syncFailures.length} tone={data.syncFailures.length ? 'bad' : 'default'} />
+            <Tile label="Produtos confirmados" value={`${num(data.products.confirmed)} / ${num(data.products.total)}`} tone="good" icon={CircleCheckBig} hint="Produtos com disponibilidade confirmada, do total do catálogo" />
+            <Tile label="Produtos não confirmados" hint="A disponibilidade depende de revisão (dados desatualizados, situação sem regra, possível duplicidade…)" value={data.products.unconfirmed} tone={data.products.unconfirmed ? 'warn' : 'default'} icon={CircleHelp} />
+            <Tile label="Produtos com divergência" value={data.divergent.length} tone={data.divergent.length ? 'bad' : 'default'} icon={GitCompareArrows} />
+            <Tile label="Pedidos acima do estoque" value={data.atRisk.length} tone={data.atRisk.length ? 'bad' : 'default'} icon={TrendingDown} hint="Produtos em que os pedidos em aberto somam mais do que o estoque" />
+            <Tile label="Pedidos confirmados sem baixa" value={`${byCategory('COMMITTED').orders} (${num(byCategory('COMMITTED').units)} un.)`} tone="brand" icon={ShoppingCart} hint="Pedidos pagos/confirmados ainda não baixados no Bling: prendem estoque" />
+            <Tile label="Pré-pedidos com reserva" value={`${byCategory('PRE_ORDER_RESERVED').orders} (${num(byCategory('PRE_ORDER_RESERVED').units)} un.)`} tone="brand" icon={CalendarClock} />
+            <Tile label="Reservas ativas / vencendo" hint="Vencendo = vencem nas próximas horas configuradas em Parâmetros" value={`${data.reservations.active} / ${data.reservations.expiring}`} tone={data.reservations.expiring ? 'warn' : 'default'} icon={Bookmark} />
+            <Tile label="Reservas vencidas / aguardando aprovação" value={`${data.reservations.expired} / ${data.reservations.pending}`} tone={data.reservations.expired ? 'warn' : 'default'} icon={Hourglass} />
+            <Tile label="Alertas críticos" value={alertCount('critical')} tone={alertCount('critical') ? 'bad' : 'default'} icon={Siren} />
+            <Tile label="Alertas de atenção" value={alertCount('warning')} tone={alertCount('warning') ? 'warn' : 'default'} icon={TriangleAlert} />
+            <Tile label="Falhas de sincronização (7 dias)" value={data.syncFailures.length} tone={data.syncFailures.length ? 'bad' : 'good'} icon={RefreshCw} />
           </div>
 
           {data.virtualCheck.checked > 0 && <VirtualCheck check={data.virtualCheck} />}
@@ -85,7 +86,7 @@ export default function Dashboard() {
 
           {data.oldestCommitted.length > 0 && (
             <section className="card overflow-hidden">
-              <div className="border-b border-slate-100 px-4 py-2">
+              <div className="border-b border-slate-100 px-5 py-3.5">
                 <h2 className="text-sm font-semibold">Pedidos parados há mais de {data.recentCommitted.days} dias (prendem estoque)</h2>
                 <p className="text-xs text-slate-500">
                   Confira se ainda vão ser entregues. Se já foram entregues ou o cliente desistiu, atualize a situação no Bling (Atendido ou Cancelado) para liberar o estoque.
@@ -112,7 +113,7 @@ export default function Dashboard() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="card overflow-hidden">
-              <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Pedidos em aberto por situação</h2>
+              <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Pedidos em aberto por situação</h2>
               <Table columns={['Situação', 'Categoria', 'Pedidos', 'Unidades']}>
                 {data.orders.map((o, i) => (
                   <tr key={i}><td className="td">{o.situation ?? '—'}</td><td className="td text-xs">{CATEGORY_LABEL[o.category]}</td><td className="td tabular-nums">{o.orders}</td><td className="td tabular-nums">{num(Number(o.units))}</td></tr>
@@ -120,7 +121,7 @@ export default function Dashboard() {
               </Table>
             </section>
             <section className="card overflow-hidden">
-              <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Quantidade comprometida por vendedor</h2>
+              <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Quantidade comprometida por vendedor</h2>
               <Table columns={['Vendedor', 'Em pedidos (un.)', 'Em reservas (un.)']}>
                 {[...new Set([...data.committedBySeller.orders.map((o) => o.seller), ...data.committedBySeller.reservations.map((r) => r.seller)])].map((s) => (
                   <tr key={s}>
@@ -134,7 +135,7 @@ export default function Dashboard() {
           </div>
 
           <section className="card overflow-hidden">
-            <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Histórico recente de reservas</h2>
+            <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Histórico recente de reservas</h2>
             <Table columns={['Quando', 'Produto', 'Cliente', 'Qtd', 'Ação', 'Por']}>
               {data.recentReservationChanges.map((h, i) => (
                 <tr key={i}>
@@ -147,7 +148,7 @@ export default function Dashboard() {
 
           {data.syncFailures.length > 0 && (
             <section className="card overflow-hidden">
-              <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Falhas de sincronização</h2>
+              <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Falhas de sincronização</h2>
               <Table columns={['Quando', 'Recurso', 'Erro']}>
                 {data.syncFailures.map((f, i) => <tr key={i}><td className="td text-xs">{dateTime(f.started_at)}</td><td className="td">{f.kind}</td><td className="td text-xs text-rose-700">{f.error}</td></tr>)}
               </Table>
@@ -177,7 +178,7 @@ function ProductTable({ title, rows }: { title: string; rows: Row[] }) {
   if (rows.length === 0) return null;
   return (
     <section className="card overflow-hidden">
-      <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">{title}</h2>
+      <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">{title}</h2>
       <Table columns={['Produto', 'Físico', 'Virtual (Bling)', 'Pedidos em aberto', 'Saldo calculado', 'Disponível', 'Ocorrências']}>
         {rows.map((r) => (
           <tr key={r.id}>

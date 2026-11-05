@@ -1,3 +1,4 @@
+import { Bookmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -82,8 +83,8 @@ export default function Reservations() {
 
   const manager = user?.role !== 'vendedor';
   return (
-    <div className="mx-auto max-w-6xl p-3 sm:p-6">
-      <PageHeader title="Reservas" subtitle="Reservas complementares ao Bling (não alteram o ERP). Para reservar, abra o produto (pela busca ou pela tela Estoque) e use o botão de reserva." />
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
+      <PageHeader icon={Bookmark} title="Reservas" subtitle="Reservas complementares ao Bling (não alteram o ERP). Para reservar, abra o produto (pela busca ou pela tela Estoque) e use o botão de reserva." />
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div>
           <label className="label">Situação</label>

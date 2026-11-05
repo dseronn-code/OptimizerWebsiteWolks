@@ -1,3 +1,4 @@
+import { Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
@@ -20,11 +21,11 @@ export default function Admin() {
   ];
   const [tab, setTab] = useState<Tab>(tabs[0][0]);
   return (
-    <div className="mx-auto max-w-6xl p-3 sm:p-6">
-      <PageHeader title={isAdmin ? 'Administração' : 'Configuração'} />
-      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
+      <PageHeader icon={Settings} title={isAdmin ? 'Administração' : 'Configuração'} subtitle={isAdmin ? 'Integração com o Bling, regras, usuários, parâmetros e registros do sistema' : 'Regras de situação e parâmetros de cálculo'} />
+      <div className="mb-5 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/70 p-1 shadow-sm backdrop-blur">
         {tabs.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${tab === k ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <button key={k} onClick={() => setTab(k)} className={`shrink-0 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${tab === k ? 'bg-brand-600 text-white shadow-[var(--shadow-glow)]' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
             {label}
           </button>
         ))}
@@ -420,7 +421,7 @@ function SyncTab() {
       </div>
       {msg && <p className="text-sm text-emerald-700">{msg}</p>}
       <section className="card overflow-hidden">
-        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Execuções</h2>
+        <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Execuções</h2>
         <Table columns={['Início', 'Etapa', 'Resultado', 'Itens', 'Origem', 'Erro']}>
           {(data?.runs ?? []).map((r: any) => (
             <tr key={r.id}>
@@ -432,7 +433,7 @@ function SyncTab() {
         </Table>
       </section>
       <section className="card overflow-hidden">
-        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Fila de processamento</h2>
+        <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Fila de processamento</h2>
         <Table columns={['Tarefa', 'Situação', 'Tentativas', 'Próxima execução', 'Erro']}>
           {(data?.jobs ?? []).map((j: any) => (
             <tr key={j.id}><td className="td">{JOB_TYPE[j.type] ?? j.type}</td><td className="td text-xs">{JOB_STATUS[j.status] ?? j.status}</td><td className="td text-xs">{j.attempts}/{j.max_attempts}</td><td className="td text-xs">{dateTime(j.run_at)}</td><td className="td text-xs text-rose-700">{j.last_error}</td></tr>
@@ -440,7 +441,7 @@ function SyncTab() {
         </Table>
       </section>
       <section className="card overflow-hidden">
-        <h2 className="border-b border-slate-100 px-4 py-2 text-sm font-semibold">Avisos recebidos do Bling (webhooks)</h2>
+        <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Avisos recebidos do Bling (webhooks)</h2>
         <Table columns={['Recebido', 'Evento', 'Código no Bling', 'Situação', 'Observação']}>
           {(data?.webhooks ?? []).map((w: any) => (
             <tr key={w.event_id}><td className="td text-xs">{dateTime(w.received_at)}</td><td className="td text-xs">{w.resource}.{w.action}</td><td className="td text-xs">{w.resource_id}</td><td className="td text-xs">{WEBHOOK_STATUS[w.status] ?? w.status}</td><td className="td text-xs">{w.note}</td></tr>

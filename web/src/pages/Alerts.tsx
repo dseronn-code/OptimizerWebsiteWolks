@@ -1,3 +1,4 @@
+import { Bell } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -58,8 +59,8 @@ export default function Alerts() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl p-3 sm:p-6">
-      <PageHeader title="Alertas" subtitle="Gerados automaticamente pelo cálculo de disponibilidade e pela sincronização com o Bling" />
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-8">
+      <PageHeader icon={Bell} title="Alertas" subtitle="Gerados automaticamente pelo cálculo de disponibilidade e pela sincronização com o Bling" />
       <div className="card mb-4 flex flex-wrap gap-3 p-4">
         <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Situação do alerta">
           <option value="active">Abertos</option>
