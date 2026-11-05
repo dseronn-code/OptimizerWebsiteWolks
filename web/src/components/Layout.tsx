@@ -3,6 +3,7 @@ import { AlertTriangle, BarChart3, Boxes, Bell, Bookmark, ClipboardList, History
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api } from '../api';
+import { resetIntro } from './Intro';
 import { useAuth } from '../auth';
 import { ago } from '../format';
 
@@ -158,6 +159,7 @@ function Footer({ user, status, ordersAt, onLogout }: { user: ReturnType<typeof 
         className="px-1 text-left text-[11px] text-brand-300/70 underline-offset-2 hover:text-rose-300 hover:underline"
         onClick={async () => {
           if (!confirm('Sair desta conta em TODOS os aparelhos (celulares e computadores)?')) return;
+          resetIntro();
           await api.post('/api/auth/logout-all').catch(() => undefined);
           window.location.reload();
         }}

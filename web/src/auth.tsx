@@ -1,3 +1,4 @@
+import { resetIntro } from './components/Intro';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api } from './api';
 import type { User } from './types';
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { done: true };
   };
   const logout = async () => {
+    resetIntro();
     await api.post('/api/auth/logout');
     setUser(null);
   };

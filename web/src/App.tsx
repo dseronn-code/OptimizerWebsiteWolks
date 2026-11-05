@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
+import Intro from './components/Intro';
 import Layout from './components/Layout';
 import Admin from './pages/Admin';
 import Alerts from './pages/Alerts';
@@ -22,8 +23,10 @@ function Guard({ roles, children }: { roles?: Role[]; children: React.ReactEleme
 export default function App() {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex h-full items-center justify-center text-slate-500">Carregando…</div>;
-  if (!user) return <Login />;
+  if (!user) return <><Login /><Intro autoStart={false} /></>;
   return (
+    <>
+    <Intro autoStart />
     <Layout>
       <Routes>
         <Route path="/" element={<Assistant />} />
@@ -38,5 +41,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
+    </>
   );
 }

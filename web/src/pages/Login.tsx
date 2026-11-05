@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { BRAND } from '../brand';
+import { primeIntroAudio } from '../components/Intro';
 
 type Mode = 'login' | 'signup' | 'code' | 'pending' | 'mfa-verify' | 'mfa-setup';
 
@@ -23,7 +24,8 @@ export default function Login() {
   }, []);
 
   return (
-    <div className="flex min-h-full bg-white">
+    // qualquer clique/tecla na tela de login libera o som da abertura (exigência dos navegadores)
+    <div className="flex min-h-full bg-white" onClickCapture={primeIntroAudio} onKeyDownCapture={primeIntroAudio}>
       {/* painel da marca (somente telas grandes) */}
       <div className="relative hidden w-[46%] max-w-2xl flex-col justify-between overflow-hidden bg-brand-950 p-12 text-white lg:flex">
         <div className="pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-brand-500/30 blur-3xl" aria-hidden />
