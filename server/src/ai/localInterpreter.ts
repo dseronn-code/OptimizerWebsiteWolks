@@ -54,7 +54,11 @@ export function codeIn(question: string): string | null {
 
 function productTerm(question: string, extraStop: string[] = []): string {
   const extra = new Set(extraStop);
-  return normalize(question)
+  // medidas ("600 x 600", "12 u") ficam juntas para não serem descartadas como quantidade: "600x600", "12u"
+  const joined = question
+    .replace(/(\d)\s*[x×*]\s*(?=\d)/gi, '$1x')
+    .replace(/(\d)\s+(u|mm|cm)\b/gi, '$1$2');
+  return normalize(joined)
     .split(' ')
     .filter((w) => w && !STOPWORDS.has(w) && !extra.has(w) && !/^\d+([.,]\d+)?$/.test(w))
     .join(' ');

@@ -394,6 +394,28 @@ describe('interpretador local: perguntas gerais', () => {
     invalidateProductCache();
   });
 
+  it('medidas na busca são obrigatórias: "rack 12u x 600 x 600" não traz 600 x 250, 350, 450', async () => {
+    await pool.query(
+      `INSERT INTO products (id, sku, name, format, kind, search_text) VALUES
+         (880041, 'OSTT-061260', 'Rack Outdoor Poste/Piso IP55 12U X 600 X 600mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
+         (880042, 'OSTT-061225-GLM', 'Rack Outdoor Poste IP65 12U X 600 X 250mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
+         (880043, 'OSTT-061245', 'Rack Outdoor Poste/Piso IP55 12U X 600 X 450mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
+         (880044, 'OSTT-081260', 'Rack Outdoor Poste/Piso IP55 8U X 600 X 600mm Alumínio', 'S', 'P', '')`,
+    );
+    invalidateProductCache();
+    const { searchProducts } = await import('../src/stock/productSearch.js');
+    for (const q of ['rack 12u x 600 x 600 qual a previsao', 'rack 12U 600x600', 'rack 12 u 600 x 600']) {
+      const found = await searchProducts(q);
+      expect(found.map((x) => x.sku), q).toEqual(['OSTT-061260']);
+    }
+    // o assistente responde direto pelo produto certo
+    const r = await answerQuestion('rack 12u x 600 x 600 qual a previsao', [], seller1, null);
+    expect(r.cards.some((c) => c.type === 'candidates')).toBe(false);
+    expect(JSON.stringify(r)).not.toContain('OSTT-061245');
+    await pool.query('DELETE FROM products WHERE id BETWEEN 880041 AND 880044');
+    invalidateProductCache();
+  });
+
   it('produto inexistente gera orientação em vez de erro', async () => {
     const r = await answerQuestion('quanto temos do parafuso xyz?', [], seller1, null);
     expect(r.answer).toMatch(/Não encontrei um produto/);

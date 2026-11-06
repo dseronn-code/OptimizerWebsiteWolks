@@ -19,6 +19,7 @@ interface CachedProduct {
   active: boolean;
   skuNorm: string;
   nameNorm: string;
+  dims: string[];
   tokens: string[];
 }
 
@@ -34,7 +35,8 @@ async function loadProducts(): Promise<CachedProduct[]> {
   const { rows } = await pool.query("SELECT id, parent_id, sku, name, format, active FROM products WHERE kind = 'P' OR format = 'V'");
   const items = rows.map((r) => {
     const nameNorm = normalize(r.name);
-    return { id: Number(r.id), parentId: r.parent_id ? Number(r.parent_id) : null, sku: r.sku, name: r.name, format: r.format, active: r.active, skuNorm: normalize(r.sku), nameNorm, tokens: nameNorm.split(' ').filter(Boolean) };
+    const nameSplit = normalize(String(r.name).replace(/(\d)\s*[x×*]\s*(?=\d)/gi, '$1 x '));
+    return { id: Number(r.id), parentId: r.parent_id ? Number(r.parent_id) : null, sku: r.sku, name: r.name, format: r.format, active: r.active, skuNorm: normalize(r.sku), nameNorm: nameSplit, tokens: nameSplit.split(' ').filter(Boolean), dims: dimensions(r.name) };
   });
   cache = { at: Date.now(), items };
   return items;
@@ -55,18 +57,57 @@ function tokenScore(q: string, tokens: string[]): number {
   return best;
 }
 
+/** Palavras da pergunta que não descrevem o produto. */
+const QUERY_STOPWORDS = new Set(
+  `qual quais quanto quantos quantas quando onde como tem temos ha existe a o as os um uma de do da dos das no na nos nas em para pra com
+   e ou que previsao previsto prevista chega chegar chegada entrada entradas estoque disponivel disponiveis preco valor tamanho tamanhos
+   modelo modelos tipo tipos me mostra mostre ver sobre esse este desse deste produto produtos item itens sku codigo voce voces nos`.split(/\s+/),
+);
+
+/** "12U X 600 X 600mm", "600x600", "12 u" → medidas normalizadas: ['12u', '600', '600']. */
+export function dimensions(text: string): string[] {
+  const t = normalize(text.replace(/(\d)\s*[x×*]\s*(?=\d)/gi, '$1 x '));
+  const out: string[] = [];
+  const re = /(?:^|\s)(\d+(?:[.,]\d+)?)\s?(u|mm|cm|m|mts|metros?|vias|pol|w|v|a|kg|gb)?(?=\s|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t))) {
+    const unit = m[2] ?? '';
+    // "mm/cm" são medidas comuns: comparamos só o número; "U" (altura de rack) e outras unidades ficam no valor
+    out.push(['mm', 'cm', ''].includes(unit) ? m[1] : `${m[1]}${unit.replace(/^(mts|metros?|m)$/, 'm')}`);
+    re.lastIndex -= 1;
+  }
+  return out;
+}
+
+/** Todas as medidas pedidas aparecem no produto, respeitando repetições (600 × 600 exige dois 600). */
+function hasAllDimensions(wanted: string[], have: string[]): boolean {
+  const pool = [...have];
+  for (const w of wanted) {
+    const i = pool.indexOf(w);
+    if (i < 0) return false;
+    pool.splice(i, 1);
+  }
+  return true;
+}
+
 /**
  * Busca tolerante a erros de digitação e nomes incompletos.
  * Prioriza SKU exato, depois SKU por prefixo, depois correspondência por palavras/trigramas.
+ * Medidas na busca (12U, 600 x 600…) são obrigatórias: produto com outras medidas não aparece.
  */
 export async function searchProducts(term: string, limit = 8): Promise<ProductMatch[]> {
-  const q = normalize(term);
+  const wantedDims = dimensions(term);
+  const q = normalize(term.replace(/(\d)\s*[x×*]\s*(?=\d)/gi, '$1 x '))
+    .split(' ')
+    .filter((w) => w && !QUERY_STOPWORDS.has(w))
+    .join(' ');
   if (!q) return [];
   const qTokens = q.split(' ').filter((t) => t.length > 1);
   const products = await loadProducts();
   const scored: ProductMatch[] = [];
   for (const p of products) {
     if (p.format === 'V') continue; // pai de variações não tem estoque próprio; só aparece via findExactSku
+    if (wantedDims.length && !hasAllDimensions(wantedDims, p.dims)) continue;
     let score = 0;
     if (p.skuNorm && p.skuNorm === q) score = 1;
     else if (p.skuNorm && q.length >= 2 && p.skuNorm.startsWith(q)) score = 0.92;
@@ -77,6 +118,8 @@ export async function searchProducts(term: string, limit = 8): Promise<ProductMa
       const contains = p.nameNorm.includes(q) ? 0.85 : 0;
       score = Math.max(tokenAvg * 0.9, tri, contains);
     }
+    // medidas batendo exatamente (sem medidas a mais) valem um pouco mais
+    if (wantedDims.length && p.dims.length === wantedDims.length) score = Math.min(1, score + 0.05);
     if (!p.active) score *= 0.8;
     if (score >= 0.35) scored.push({ id: p.id, sku: p.sku, name: p.name, format: p.format, active: p.active, score: Math.round(score * 100) / 100 });
   }
