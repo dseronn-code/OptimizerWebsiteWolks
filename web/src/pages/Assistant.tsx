@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, Eraser, MessageSquareText, Search, Send, Sparkles, User as UserIcon } from 'lucide-react';
+import { ArrowRight, Bot, ChevronRight, Eraser, MessageSquareText, Search, Send, Sparkles, User as UserIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, qs } from '../api';
@@ -202,13 +202,18 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
         ))}
         {(m.cards ?? []).map((c, i) =>
           c.type === 'candidates' ? (
-            <div key={i} className="card divide-y divide-slate-100">
-              {c.data.map((p) => (
-                <button key={p.id} onClick={() => onPick(p)} className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-brand-50">
-                  <span><span className="font-semibold text-brand-600">{p.sku ?? '—'}</span> · {p.name}</span>
-                  <span className="text-xs text-slate-400">{Math.round(p.score * 100)}%</span>
-                </button>
-              ))}
+            <div key={i} className="card overflow-hidden">
+              <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
+                Produtos encontrados <span className="font-normal text-slate-500">· toque em um para ver o disponível</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {c.data.map((p) => (
+                  <button key={p.id} onClick={() => onPick(p)} className="group flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-brand-50">
+                    <span className="min-w-0"><span className="font-semibold text-brand-600">{p.sku ?? 'sem SKU'}</span> <span className="text-slate-700">· {p.name}</span>{!p.active && <span className="ml-2 text-xs text-slate-400">(inativo)</span>}</span>
+                    <ChevronRight size={16} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
+                  </button>
+                ))}
+              </div>
             </div>
           ) : c.type === 'table' ? (
             <div key={i} className="card overflow-hidden">
