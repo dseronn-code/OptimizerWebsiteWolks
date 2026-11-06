@@ -189,7 +189,7 @@ async function sendMenu(c: Ctx, greet = false) {
     { id: 'm:reservar', title: '📌 Fazer reserva', description: 'Separar unidades para um cliente' },
     { id: 'm:minhas_reservas', title: '📋 Minhas reservas', description: 'Ver, renovar ou cancelar' },
     { id: 'm:compra', title: '🛒 Solicitar compra', description: 'Pedir um produto que está em falta' },
-    { id: 'm:minhas_compras', title: '🧾 Minhas solicitações', description: 'Andamento dos pedidos de compra' },
+    { id: 'm:minhas_compras', title: '🧾 Minhas compras', description: 'Andamento das solicitações de compra' },
     { id: 'm:pedidos', title: '📦 Meus pedidos abertos', description: 'Pedidos que ainda prendem estoque' },
   ];
   if (isManager(c)) {
@@ -269,14 +269,53 @@ async function askAssistant(c: Ctx, question: string) {
     );
     return;
   }
+  // um produto: sempre o cartão padrão (números do motor, mesmo visual), com o veredito da venda se houve pergunta de quantidade
   const avail = r.cards.filter((x): x is Extract<Card, { type: 'availability' }> => x.type === 'availability');
-  const productId = avail.length === 1 ? avail[0].data.product.id : null;
-  const text = r.answer.replace(/\*\*/g, '*');
-  if (productId) {
-    await sendButtons(c.to, text, productButtons(productId, avail[0].data.kit ? avail[0].data.kit.availableForSale : avail[0].data.availableForSale));
-  } else {
-    await sendText(c.to, text);
+  const uniqueIds = [...new Set(avail.map((a) => a.data.product.id))];
+  if (uniqueIds.length === 1) {
+    const last = avail[avail.length - 1];
+    await showProduct(c, uniqueIds[0], last.sale ?? null);
+    return;
   }
+  // listas (produtos, pedidos, reservas, entradas…): formatadas para o WhatsApp
+  const tables = r.cards.filter((x): x is Extract<Card, { type: 'table' }> => x.type === 'table');
+  if (tables.length) {
+    for (const t of tables.slice(0, 2)) await sendText(c.to, formatTable(t));
+    return;
+  }
+  await sendText(c.to, r.answer.replace(/\*\*/g, '*'));
+}
+
+const MAX_ROWS = 25;
+
+/** Tabela → mensagem de WhatsApp legível (título, uma linha por item, total). */
+function formatTable(t: Extract<Card, { type: 'table' }>): string {
+  const col = (name: string) => t.columns.findIndex((x) => normalize(x) === normalize(name));
+  const iSku = col('SKU');
+  const iName = col('Produto');
+  const iAvail = col('Disponível');
+  const iPhys = col('Físico');
+  const iStatus = col('Situação');
+  const v = (row: (string | number | null)[], i: number) => (i >= 0 && row[i] !== null && row[i] !== undefined && row[i] !== '' ? row[i] : null);
+  const num = (x: string | number | null) => (typeof x === 'number' ? fmt(x) : x);
+  const lines = t.rows.slice(0, MAX_ROWS).map((row) => {
+    if (iAvail >= 0 && iName >= 0) {
+      // lista de produtos
+      const avail = Number(v(row, iAvail) ?? 0);
+      const icon = avail > 0 ? '🟢' : '⚪';
+      const unconfirmed = iStatus >= 0 && String(v(row, iStatus) ?? '').startsWith('Não') ? ' ⚠️' : '';
+      return `${icon} *${v(row, iSku) ?? '—'}* · ${v(row, iName)}\n      Disponível: *${num(v(row, iAvail))}*${v(row, iPhys) !== null ? ` · Físico ${num(v(row, iPhys))}` : ''}${unconfirmed}`;
+    }
+    // genérico: primeira coluna em destaque, demais como "Coluna: valor"
+    const [first, ...rest] = row;
+    const extras = rest.map((x, k) => (x === null || x === '' ? null : `${t.columns[k + 1]}: ${num(x)}`)).filter(Boolean);
+    return `▸ *${num(first) ?? '—'}*${extras.length ? `\n      ${extras.join(' · ')}` : ''}`;
+  });
+  const more = t.rows.length > MAX_ROWS
+    ? `\n\n…e mais ${fmt(t.rows.length - MAX_ROWS)}. Para ver um item, envie o SKU ou o nome.`
+    : '\n\nPara ver um item, envie o SKU ou o nome.';
+  const legend = iAvail >= 0 ? '\n🟢 com saldo · ⚪ sem saldo · ⚠️ não confirmado' : '';
+  return `📋 *${t.title}*${t.rows.length > 1 ? ` (${fmt(t.rows.length)})` : ''}\n\n${lines.join('\n')}${more}${legend}`;
 }
 
 function productButtons(productId: number, available: number): Button[] {
@@ -287,7 +326,7 @@ function productButtons(productId: number, available: number): Button[] {
 
 // ---------------------------------------------------------------- produto
 
-async function showProduct(c: Ctx, productId: number) {
+async function showProduct(c: Ctx, productId: number, sale: { requested: number; possible: boolean | null; shortfall: number; remainingAfterSale: number | null } | null = null) {
   const r = await getAvailability(productId, { viewer: viewer(c.user) });
   if (!r) {
     await sendText(c.to, 'Produto não encontrado.');
@@ -297,28 +336,39 @@ async function showProduct(c: Ctx, productId: number) {
   const avail = r.kit ? r.kit.availableForSale : r.availableForSale;
   const unit = r.product.unit ? ` ${r.product.unit}` : '';
   const d = r.deductions;
+  const verdict = !sale
+    ? []
+    : sale.possible === false || (sale.possible === null && avail <= 0)
+      ? [`❌ *Não dá para vender ${fmt(sale.requested)}${unit}.*`, avail > 0 ? `Faltam ${fmt(sale.shortfall)}${unit}.` : 'Não há saldo livre para nova venda.', '']
+      : sale.possible === true
+      ? [`✅ *Pode vender ${fmt(sale.requested)}${unit}!*`, `Depois da venda restam ${fmt(sale.remainingAfterSale)}${unit}.`, '']
+      : sale.possible === false
+        ? [`❌ *Não dá para vender ${fmt(sale.requested)}${unit}.*`, `Faltam ${fmt(sale.shortfall)}${unit}.`, '']
+        : [`⚠️ *Não consigo confirmar a venda de ${fmt(sale.requested)}${unit}* — veja os avisos abaixo.`, ''];
   const lines = [
-    `📦 *${r.product.sku ?? 'sem SKU'}* — ${r.product.name}`,
+    ...verdict,
+    `📦 *${r.product.sku ?? 'sem SKU'}*`,
+    r.product.name,
     '',
     avail > 0 ? `✅ *Disponível para venda: ${fmt(avail)}${unit}*` : `⛔ *Sem saldo para nova venda* (0${unit})`,
     '',
-    `Estoque físico: ${fmt(r.physicalTotal)}`,
+    `▫️ Estoque físico: ${fmt(r.physicalTotal)}`,
   ];
-  if (d.committedOrders) lines.push(`− Pedidos ainda sem baixa: ${fmt(d.committedOrders)}`);
-  if (d.preOrderReservations) lines.push(`− Pré-pedidos com reserva: ${fmt(d.preOrderReservations)}`);
-  if (d.localReservations) lines.push(`− Reservas: ${fmt(d.localReservations)}`);
-  if (d.blocked) lines.push(`− Bloqueios: ${fmt(d.blocked)}`);
-  if (d.uncertain) lines.push(`− Incertos (por precaução): ${fmt(d.uncertain)}`);
+  if (d.committedOrders) lines.push(`▫️ Pedidos ainda sem baixa: −${fmt(d.committedOrders)}`);
+  if (d.preOrderReservations) lines.push(`▫️ Pré-pedidos com reserva: −${fmt(d.preOrderReservations)}`);
+  if (d.localReservations) lines.push(`▫️ Reservas: −${fmt(d.localReservations)}`);
+  if (d.blocked) lines.push(`▫️ Bloqueios: −${fmt(d.blocked)}`);
+  if (d.uncertain) lines.push(`▫️ Incertos (por precaução): −${fmt(d.uncertain)}`);
   if (r.kit) lines.push(`Kit montado pelos componentes.`);
   if (r.status !== 'CONFIRMED') {
     lines.push('', '⚠️ *Disponibilidade não confirmada* — confirme com o gestor antes de prometer ao cliente:');
-    for (const i of r.issues.filter((x) => x.severity !== 'info').slice(0, 3)) lines.push(`• ${i.message}`);
+    for (const msg of [...new Set(r.issues.filter((x) => x.severity !== 'info').map((x) => x.message))].slice(0, 3)) lines.push(`• ${msg}`);
   }
   if (r.incoming.length) {
     lines.push('', `🚚 A chegar (ainda não conta no disponível): ${r.incoming.map((e) => `${fmt(e.quantity)}${e.expectedDate ? ` em ${brDate(e.expectedDate)}` : ''}`).join(', ')}`);
   }
   if (r.dataSource === 'demo') lines.push('', '_Ambiente de demonstração — dados fictícios._');
-  lines.push('', `_Dados de ${brDateTime(r.dataAsOf) ?? 'agora'}_`);
+  lines.push('', `🕒 _Atualizado em ${brDateTime(r.dataAsOf) ?? 'agora'}_`);
   await sendButtons(c.to, lines.join('\n'), productButtons(productId, avail));
 }
 
@@ -671,7 +721,7 @@ async function confirmFlow(c: Ctx, raw?: string) {
         'whatsapp',
       );
       await sendButtons(c.to, `✅ *Solicitação de compra #${pr.number} enviada!*\nO gestor foi avisado. Você recebe uma mensagem aqui quando ela andar.`, [
-        { id: 'm:minhas_compras', title: '🧾 Minhas solicitações' },
+        { id: 'm:minhas_compras', title: '🧾 Minhas compras' },
         { id: 'm:menu', title: 'Menu' },
       ]);
     } catch (err) {
@@ -816,7 +866,7 @@ async function doPurchaseUpdate(c: Ctx, prId: string, status: PurchaseStatus, no
   try {
     const pr = await updatePurchaseRequest(prId, status, viewer(c.user), note);
     await sendButtons(c.to, `Solicitação #${pr.number} marcada como *${PURCHASE_STATUS_LABEL[status]}*.${status !== 'CANCELLED' ? ' O vendedor foi avisado.' : ''}`, [
-      { id: isManager(c) ? 'm:compras_abertas' : 'm:minhas_compras', title: isManager(c) ? '🛍️ Compras em aberto' : '🧾 Minhas solicitações' },
+      { id: isManager(c) ? 'm:compras_abertas' : 'm:minhas_compras', title: isManager(c) ? '🛍️ Compras abertas' : '🧾 Minhas compras' },
       { id: 'm:menu', title: 'Menu' },
     ]);
   } catch (err) {
