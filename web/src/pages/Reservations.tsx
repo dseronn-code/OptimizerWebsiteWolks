@@ -1,8 +1,9 @@
-import { Bookmark } from 'lucide-react';
+import { Bookmark, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
 import { useAuth } from '../auth';
+import NewReservation from '../components/NewReservation';
 import { Empty, ErrorMsg, PageHeader, Table } from '../components/ui';
 import { dateTime, num, RESERVATION_ACTION, RESERVATION_STATUS } from '../format';
 
@@ -35,6 +36,7 @@ export default function Reservations() {
   const { user } = useAuth();
   const [status, setStatus] = useState('');
   const [mine, setMine] = useState(user?.role === 'vendedor');
+  const [creating, setCreating] = useState(false);
   const [customer, setCustomer] = useState('');
   const [rows, setRows] = useState<Reservation[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,13 @@ export default function Reservations() {
   const manager = user?.role !== 'vendedor';
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
-      <PageHeader icon={Bookmark} title="Reservas" subtitle="Reservas complementares ao Bling (não alteram o ERP). Para reservar, abra o produto (pela busca ou pela tela Estoque) e use o botão de reserva." />
+      <PageHeader
+        icon={Bookmark}
+        title="Reservas"
+        subtitle="Reservas complementares ao Bling (não alteram o ERP): separam unidades para um cliente por um prazo."
+        actions={!creating && <button className="btn-primary" onClick={() => setCreating(true)}><Plus size={16} /> Nova reserva</button>}
+      />
+      {creating && <NewReservation onCancel={() => setCreating(false)} onDone={() => { setCreating(false); void load(); }} />}
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div>
           <label className="label">Situação</label>
@@ -94,7 +102,7 @@ export default function Reservations() {
           </select>
         </div>
         <div><label className="label">Cliente</label><input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
-        <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Somente as minhas</label>
+        {manager && <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Somente as minhas</label>}
       </div>
       <ErrorMsg error={error} />
       {rows.length === 0 ? <Empty>Nenhuma reserva.</Empty> : (
