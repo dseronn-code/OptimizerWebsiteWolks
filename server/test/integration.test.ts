@@ -334,6 +334,27 @@ describe('interpretador local: perguntas gerais', () => {
     invalidateProductCache();
   });
 
+  it('lista por categoria traz primeiro o próprio produto, não os acessórios que só citam o nome', async () => {
+    await pool.query(
+      `INSERT INTO products (id, sku, name, format, kind, search_text) VALUES
+         (880011, 'ETQ-1', 'Etiqueta Resinada Para Racks e Painéis', 'S', 'P', ''),
+         (880012, 'CBAP-4', 'Kit Cinta BAP Fixação De Rack', 'S', 'P', ''),
+         (880013, 'ECOB-0604-06', 'Rack Outdoor Econo-BOX 6U x 400mm', 'S', 'P', '')`,
+    );
+    await pool.query(
+      `INSERT INTO stock_balances (product_id, deposit_id, physical, virtual, fetched_at) VALUES
+         (880011, $1, 1290, 1290, now()), (880012, $1, 1230, 1230, now()), (880013, $1, 77, 77, now())`,
+      [DEP_A],
+    );
+    invalidateStockOverview();
+    const r = await answerQuestion('olá, temos quais tamanhos de rack disponiveis para venda', [], seller1, null);
+    const table = r.cards.find((c) => c.type === 'table') as { rows: (string | number | null)[][] } | undefined;
+    expect(table?.rows[0][0]).toBe('ECOB-0604-06');
+    await pool.query('DELETE FROM stock_balances WHERE product_id IN (880011, 880012, 880013)');
+    await pool.query('DELETE FROM products WHERE id IN (880011, 880012, 880013)');
+    invalidateStockOverview();
+  });
+
   it('produto inexistente gera orientação em vez de erro', async () => {
     const r = await answerQuestion('quanto temos do parafuso xyz?', [], seller1, null);
     expect(r.answer).toMatch(/Não encontrei um produto/);

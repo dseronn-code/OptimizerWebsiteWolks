@@ -189,10 +189,11 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
     /(quais|que|lista|listar|liste|mostra|mostre|todos os|todas as|relacao|relatorio)\b.*\b(produtos|itens|mercadorias)\b/.test(q) ||
     /\b(produtos|itens)\b.*\b(disponiveis|em estoque|para venda|pra venda|sem estoque|zerados?|em falta|esgotados?)\b/.test(q) ||
     /\b(o que|oque)\b.*\b(temos|tem|ha)\b.*\b(disponivel|disponiveis|estoque|para vender|pra vender)\b/.test(q) ||
-    /\b(sem estoque|em falta|esgotad|zerad)/.test(q);
+    /\b(sem estoque|em falta|esgotad|zerad)/.test(q) ||
+    /\b(quais|que|temos)\b.*\b(tamanhos?|modelos?|tipos?|opcoes|medidas|versoes)\b/.test(q);
   if (listIntent && !extractQuantity(q)) {
     const filtro = /(sem estoque|em falta|esgotad|zerad|acabou|acabaram)/.test(q) ? 'sem_estoque' : /(nao confirmad|duvid|incert)/.test(q) ? 'nao_confirmados' : /\btodos\b|\btodas\b|catalogo/.test(q) && !/disponi/.test(q) ? 'todos' : 'disponiveis';
-    const busca = productTerm(question, ['quais', 'produtos', 'itens', 'mercadorias', 'lista', 'listar', 'liste', 'mostra', 'mostre', 'relacao', 'relatorio', 'falta', 'esgotado', 'esgotados', 'zerado', 'zerados', 'acabou', 'acabaram', 'catalogo', 'confirmados', 'confirmado', 'oque', 'vender']);
+    const busca = productTerm(question, ['quais', 'produtos', 'itens', 'mercadorias', 'tamanho', 'tamanhos', 'modelo', 'modelos', 'tipo', 'tipos', 'opcoes', 'medidas', 'versoes', 'lista', 'listar', 'liste', 'mostra', 'mostre', 'relacao', 'relatorio', 'falta', 'esgotado', 'esgotados', 'zerado', 'zerados', 'acabou', 'acabaram', 'catalogo', 'confirmados', 'confirmado', 'oque', 'vender']);
     let r = await run('listar_produtos', { filtro, busca: busca || undefined });
     if (busca && r.total_encontrado === 0) r = await run('listar_produtos', { filtro });
     const titulo = filtro === 'sem_estoque' ? 'Produtos sem saldo para venda' : filtro === 'nao_confirmados' ? 'Produtos com disponibilidade não confirmada' : filtro === 'todos' ? 'Produtos' : 'Produtos disponíveis para venda';

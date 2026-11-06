@@ -95,6 +95,42 @@ export async function resolveProduct(ref: string, ctx: ToolContext): Promise<Res
   return { ambiguous: matches };
 }
 
+/** Palavras que descrevem a pergunta, não o produto ("tamanhos de rack" → "rack"). */
+const GENERIC_WORDS = new Set(['tamanho', 'tamanhos', 'modelo', 'modelos', 'tipo', 'tipos', 'opcao', 'opcoes', 'medida', 'medidas', 'versao', 'versoes', 'linha', 'linhas', 'variedade', 'qual', 'quais', 'temos', 'tem', 'de', 'do', 'da', 'dos', 'das', 'para', 'com', 'e']);
+/** Antes destas palavras o termo é complemento: "etiqueta PARA rack", "kit cinta DE rack". */
+const ACCESSORY_LINKS = new Set(['para', 'pra', 'p', 'de', 'do', 'da', 'dos', 'das', 'com', 'em', 'no', 'na', 'ao']);
+
+/**
+ * Relevância da busca em listas. 0 = fora. Termos que não aparecem em nenhum produto (ex.: "tamanhos")
+ * são ignorados. Nome que começa com o termo vale mais do que nome que só o menciona como complemento.
+ */
+function searchRanker(query: string, texts: string[]) {
+  const norm = texts.map((t) => normalize(t));
+  const words = norm.map((t) => t.split(/\s+/));
+  const stem = (w: string) => w.replace(/(oes|aes|es|s)$/, '');
+  let terms = normalize(query).split(/\s+/).filter((w) => w.length >= 2 && !GENERIC_WORDS.has(w));
+  terms = terms.filter((t) => norm.some((n) => n.includes(stem(t))));
+  if (!terms.length) return () => 1;
+  return (idx: number) => {
+    const ws = words[idx];
+    let score = 0;
+    for (const t of terms) {
+      const st = stem(t);
+      const pos = ws.findIndex((w) => stem(w) === st || w.startsWith(st));
+      if (pos < 0) {
+        if (!norm[idx].includes(st)) return 0; // todos os termos precisam aparecer
+        score += 1;
+        continue;
+      }
+      // posição 0 ou 1 (depois do SKU) = o produto É isso; precedido de "para/de/com…" = acessório
+      if (pos <= 1) score += 4;
+      else if (ACCESSORY_LINKS.has(ws[pos - 1])) score += 1;
+      else score += 2;
+    }
+    return score;
+  };
+}
+
 const LIST_TITLE: Record<string, string> = {
   disponiveis: 'Produtos disponíveis para venda',
   sem_estoque: 'Produtos sem saldo para venda',
@@ -369,10 +405,12 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       // usa a mesma visão da tela "Estoque": cobre o catálogo inteiro e fica em cache por 60 s
       const filtro = input.filtro ?? 'disponiveis';
       const limite = input.limite ?? 30;
-      const busca = input.busca ? normalize(input.busca) : null;
       const all = await stockOverview(null);
+      const rank = searchRanker(input.busca ?? '', all.map((i) => `${i.sku ?? ''} ${i.name}`));
       const filtered = all
-        .filter((i) => !busca || normalize(`${i.sku ?? ''} ${i.name}`).includes(busca))
+        .map((i, idx) => ({ i, score: rank(idx) }))
+        .filter((x) => x.score > 0)
+        .map((x) => ({ ...x.i, _score: x.score }))
         .filter((i) =>
           filtro === 'disponiveis' ? i.availableForSale > 0
           : filtro === 'sem_estoque' ? i.availableForSale <= 0
@@ -383,7 +421,8 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
         .sort((a, b) =>
           filtro === 'saldo_negativo' ? (a.physical ?? 0) - (b.physical ?? 0)
           : filtro === 'comprometidos' ? b.committed - a.committed
-          : b.availableForSale - a.availableForSale || a.name.localeCompare(b.name));
+          // com busca: primeiro o que É do tipo pedido (ex.: "Rack …"), depois o que só o cita ("… para rack")
+          : (b as { _score: number })._score - (a as { _score: number })._score || b.availableForSale - a.availableForSale || a.name.localeCompare(b.name));
       const shown = filtered.slice(0, limite);
       const titulo = LIST_TITLE[filtro];
       if (shown.length) {
