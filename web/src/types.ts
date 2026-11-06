@@ -95,6 +95,9 @@ export interface ProductMatch {
   format: string;
   active: boolean;
   score: number;
+  available?: number;
+  incoming?: number;
+  unit?: string | null;
 }
 
 export type Card =

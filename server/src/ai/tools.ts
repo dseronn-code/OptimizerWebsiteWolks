@@ -146,14 +146,27 @@ function searchRanker(query: string, texts: string[]) {
   };
 }
 
+/** Acrescenta às opções o disponível para venda e o que está para chegar, para facilitar a escolha. */
+async function withStock(list: ProductMatch[]): Promise<ProductMatch[]> {
+  const rows = await stockOverview(null);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return list.map((m) => {
+    const r = byId.get(m.id);
+    return r ? { ...m, available: r.availableForSale, incoming: r.incoming, unit: r.unit } : m;
+  });
+}
+
+const optionOut = (m: ProductMatch) => ({ id: m.id, sku: m.sku, nome: m.name, disponivel_para_venda: m.available ?? null, a_chegar: m.incoming ?? 0 });
+
 /** Produto inexistente: mensagem clara e, se for um código parecido com outro, as sugestões ("você quis dizer"). */
-function notFoundReply(res: Extract<ResolveResult, { notFound: true }>, ref: string, ctx: ToolContext) {
+async function notFoundReply(res: Extract<ResolveResult, { notFound: true }>, ref: string, ctx: ToolContext) {
   const code = looksLikeCode(ref);
   if (res.suggestions?.length) {
-    ctx.cards.push({ type: 'candidates', data: res.suggestions, title: 'Você quis dizer?' });
+    const data = await withStock(res.suggestions);
+    ctx.cards.push({ type: 'candidates', data, title: 'Você quis dizer?' });
     return {
       erro: `Não existe produto com o código "${ref.trim()}".`,
-      voce_quis_dizer: res.suggestions.map((m) => ({ sku: m.sku, nome: m.name })),
+      voce_quis_dizer: data.map(optionOut),
       instrucao: 'Diga que o código não foi encontrado e pergunte se o vendedor quis dizer um dos códigos sugeridos. Não mostre outros produtos.',
     };
   }
@@ -259,13 +272,15 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
     if ('notFound' in res) return notFoundReply(res, ref, ctx);
     if ('ambiguous' in res) {
       const title = res.variationsOf ? `${res.variationsOf.sku ?? ref} tem variações — escolha uma` : undefined;
-      ctx.cards.push({ type: 'candidates', data: res.ambiguous, title });
+      const data = await withStock(res.ambiguous);
+      ctx.cards.push({ type: 'candidates', data, title });
       return {
         ambiguo: true,
         mensagem: res.variationsOf
           ? `O código ${res.variationsOf.sku} tem variações. Mostre-as e peça ao vendedor para escolher uma.`
           : 'Mais de um produto corresponde. Peça ao vendedor para escolher.',
-        candidatos: res.ambiguous.map((m) => ({ id: m.id, sku: m.sku, nome: m.name })),
+        candidatos: data.map(optionOut),
+        instrucao: 'Liste as opções com o disponível para venda e o que está para chegar de cada uma, e peça para o vendedor escolher.',
       };
     }
     ctx.lastProductId = res.product.id;
@@ -282,8 +297,9 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       }
       if ('notFound' in res) return notFoundReply(res, input.termo, ctx);
       const title = res.variationsOf ? `${res.variationsOf.sku ?? input.termo} tem variações — escolha uma` : undefined;
-      ctx.cards.push({ type: 'candidates', data: res.ambiguous, title });
-      return { resultados: res.ambiguous.map((x) => ({ id: x.id, sku: x.sku, nome: x.name, ativo: x.active })), instrucao: 'Mostre as opções e peça para escolher.' };
+      const data = await withStock(res.ambiguous);
+      ctx.cards.push({ type: 'candidates', data, title });
+      return { resultados: data.map(optionOut), instrucao: 'Mostre as opções com o disponível e o que está para chegar de cada uma, e peça para escolher.' };
     }
     case 'consultar_disponibilidade':
       return withProduct(input.produto, async (p) => {
@@ -426,8 +442,9 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
         const res = await resolveProduct(input.produto, ctx);
         if ('notFound' in res) return notFoundReply(res, input.produto, ctx);
         if ('ambiguous' in res) {
-          ctx.cards.push({ type: 'candidates', data: res.ambiguous });
-          return { ambiguo: true, candidatos: res.ambiguous.map((m) => ({ sku: m.sku, nome: m.name })) };
+          const data = await withStock(res.ambiguous);
+          ctx.cards.push({ type: 'candidates', data });
+          return { ambiguo: true, candidatos: data.map(optionOut) };
         }
         productId = res.product.id;
         ctx.lastProductId = productId;

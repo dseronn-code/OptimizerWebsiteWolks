@@ -73,6 +73,13 @@ const RES_STATUS: Record<string, string> = {
   CONVERTED: 'Convertida em pedido',
 };
 
+/** Descrição de uma opção de produto: nome + disponível + o que está para chegar. */
+function optionDesc(p: { name: string; available?: number; incoming?: number }) {
+  if (p.available === undefined) return p.name;
+  const stock = p.available > 0 ? `✅ ${fmt(p.available)} disp.` : '⛔ sem saldo';
+  return `${stock}${p.incoming ? ` · 🚚 ${fmt(p.incoming)} a chegar` : ''} · ${p.name}`;
+}
+
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? '—' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 4 }));
 const firstName = (name: string) => name.replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] ?? name;
 
@@ -266,7 +273,7 @@ async function askAssistant(c: Ctx, question: string) {
         ? `Não encontrei esse código. Você quis dizer?`
         : candidates.title ?? 'Encontrei mais de um produto parecido. Qual deles?',
       'Escolher produto',
-      candidates.data.slice(0, 10).map((p) => ({ id: `p:${p.id}`, title: p.sku ?? p.name, description: p.name })),
+      candidates.data.slice(0, 10).map((p) => ({ id: `p:${p.id}`, title: p.sku ?? p.name, description: optionDesc(p) })),
       'Produtos',
     );
     return;
@@ -510,7 +517,7 @@ async function resolveInto(c: Ctx, text: string, onFound: (id: number) => Promis
       c.to,
       'Encontrei mais de um produto. Qual deles?',
       'Escolher produto',
-      res.ambiguous.slice(0, 10).map((p) => ({ id: `fp:${p.id}`, title: p.sku ?? p.name, description: p.name })),
+      res.ambiguous.slice(0, 10).map((p) => ({ id: `fp:${p.id}`, title: p.sku ?? p.name, description: optionDesc(p) })),
       'Produtos',
     );
     return true;
@@ -521,7 +528,7 @@ async function resolveInto(c: Ctx, text: string, onFound: (id: number) => Promis
       c.to,
       `Não encontrei o código *${text.trim()}*. Você quis dizer?`,
       'Ver sugestões',
-      res.suggestions.slice(0, 10).map((p) => ({ id: `fp:${p.id}`, title: p.sku ?? p.name, description: p.name })),
+      res.suggestions.slice(0, 10).map((p) => ({ id: `fp:${p.id}`, title: p.sku ?? p.name, description: optionDesc(p) })),
       'Sugestões',
     );
     return true;

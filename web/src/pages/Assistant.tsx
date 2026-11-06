@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, qs } from '../api';
 import AvailabilityCard from '../components/AvailabilityCard';
 import { Table } from '../components/ui';
+import { num } from '../format';
 import type { Card, ChatAnswer, ProductMatch } from '../types';
 
 interface Message {
@@ -210,7 +211,15 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
                 {c.data.map((p) => (
                   <button key={p.id} onClick={() => onPick(p)} className="group flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-brand-50">
                     <span className="min-w-0"><span className="font-semibold text-brand-600">{p.sku ?? 'sem SKU'}</span> <span className="text-slate-700">· {p.name}</span>{!p.active && <span className="ml-2 text-xs text-slate-400">(inativo)</span>}</span>
-                    <ChevronRight size={16} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
+                    <span className="flex shrink-0 items-center gap-3">
+                      {p.available !== undefined && (
+                        <span className="text-right text-xs leading-tight">
+                          <span className={`block font-semibold ${p.available > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>{p.available > 0 ? `${num(p.available)}${p.unit ? ` ${p.unit}` : ''} disponível` : 'sem saldo'}</span>
+                          {(p.incoming ?? 0) > 0 && <span className="block text-sky-700">chegam {num(p.incoming ?? 0)}</span>}
+                        </span>
+                      )}
+                      <ChevronRight size={16} className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
+                    </span>
                   </button>
                 ))}
               </div>

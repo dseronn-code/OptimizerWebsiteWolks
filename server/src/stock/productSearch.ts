@@ -8,6 +8,10 @@ export interface ProductMatch {
   format: string;
   active: boolean;
   score: number;
+  /** preenchidos quando a lista é mostrada como opções para escolher */
+  available?: number;
+  incoming?: number;
+  unit?: string | null;
 }
 
 interface CachedProduct {
@@ -103,27 +107,51 @@ export async function searchProducts(term: string, limit = 8): Promise<ProductMa
     .join(' ');
   if (!q) return [];
   const qTokens = q.split(' ').filter((t) => t.length > 1);
+  // palavras que descrevem o produto (sem medidas e sem o "x" de 600 x 600): todas precisam aparecer
+  const words = qTokens.filter((t) => !/^\d/.test(t) && t !== 'x');
+  const stem = (w: string) => w.replace(/(oes|aes|es|s)$/, '');
+  const hasWord = (p: CachedProduct, w: string) =>
+    // termo técnico com número (IP65, M8, CAT6) precisa ser igual: IP55 não serve para quem pediu IP65
+    /\d/.test(w)
+      ? p.tokens.includes(w) || p.skuNorm.split(' ').includes(w)
+      : tokenScore(w, p.tokens) >= 0.75 || p.tokens.some((t) => stem(t) === stem(w)) || (w.length >= 4 && p.nameNorm.includes(w)) || p.skuNorm.includes(w);
   const products = await loadProducts();
-  const scored: ProductMatch[] = [];
-  for (const p of products) {
-    if (p.format === 'V') continue; // pai de variações não tem estoque próprio; só aparece via findExactSku
-    if (wantedDims.length && !hasAllDimensions(wantedDims, p.dims)) continue;
-    let score = 0;
-    if (p.skuNorm && p.skuNorm === q) score = 1;
-    else if (p.skuNorm && q.length >= 2 && p.skuNorm.startsWith(q)) score = 0.92;
-    else if (p.skuNorm && qTokens.includes(p.skuNorm)) score = 0.95;
-    else {
-      const tokenAvg = qTokens.length ? qTokens.reduce((s, t) => s + tokenScore(t, p.tokens), 0) / qTokens.length : 0;
-      const tri = trigramSimilarity(q, p.nameNorm);
-      const contains = p.nameNorm.includes(q) ? 0.85 : 0;
-      score = Math.max(tokenAvg * 0.9, tri, contains);
+
+  const run = (strict: boolean) => {
+    const scored: ProductMatch[] = [];
+    for (const p of products) {
+      if (p.format === 'V') continue; // pai de variações não tem estoque próprio; só aparece via findExactSku
+      if (wantedDims.length && !hasAllDimensions(wantedDims, p.dims)) continue;
+      if (strict && words.length && !words.every((w) => hasWord(p, w))) continue;
+      let score = 0;
+      if (p.skuNorm && p.skuNorm === q) score = 1;
+      else if (p.skuNorm && q.length >= 2 && p.skuNorm.startsWith(q)) score = 0.92;
+      else if (p.skuNorm && qTokens.includes(p.skuNorm)) score = 0.95;
+      else {
+        const tokenAvg = qTokens.length ? qTokens.reduce((s, t) => s + tokenScore(t, p.tokens), 0) / qTokens.length : 0;
+        const tri = trigramSimilarity(q, p.nameNorm);
+        const contains = p.nameNorm.includes(q) ? 0.85 : 0;
+        score = Math.max(tokenAvg * 0.9, tri, contains);
+        // na busca estrita, todas as palavras e medidas já bateram: é um candidato forte
+        if (strict && (words.length || wantedDims.length)) score = Math.max(score, 0.8);
+      }
+      // medidas batendo exatamente (sem medidas a mais) valem um pouco mais
+      if (wantedDims.length && p.dims.length === wantedDims.length) score = Math.min(1, score + 0.05);
+      if (!p.active) score *= 0.8;
+      if (score >= 0.35) scored.push({ id: p.id, sku: p.sku, name: p.name, format: p.format, active: p.active, score: Math.round(score * 100) / 100 });
     }
-    // medidas batendo exatamente (sem medidas a mais) valem um pouco mais
-    if (wantedDims.length && p.dims.length === wantedDims.length) score = Math.min(1, score + 0.05);
-    if (!p.active) score *= 0.8;
-    if (score >= 0.35) scored.push({ id: p.id, sku: p.sku, name: p.name, format: p.format, active: p.active, score: Math.round(score * 100) / 100 });
-  }
-  return scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, limit);
+    // empate: o modelo base (código que é o começo de outros, ex.: OSTT-061260 de -ESP/-GLM) antes das variações
+    const skus = scored.map((x) => normalize(x.sku));
+    const isBase = (x: ProductMatch) => {
+      const k = normalize(x.sku);
+      return k ? skus.some((o) => o !== k && o.startsWith(`${k} `)) : false;
+    };
+    return scored.sort((a, b) => b.score - a.score || Number(isBase(b)) - Number(isBase(a)) || (a.sku ?? '').localeCompare(b.sku ?? ''));
+  };
+
+  // primeiro exige todas as palavras; se nada bater (palavra a mais, erro grosseiro), afrouxa
+  const strict = run(true);
+  return (strict.length ? strict : run(false)).slice(0, limit);
 }
 
 const toMatch = (p: CachedProduct, score: number): ProductMatch => ({ id: p.id, sku: p.sku, name: p.name, format: p.format, active: p.active, score });

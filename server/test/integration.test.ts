@@ -394,25 +394,34 @@ describe('interpretador local: perguntas gerais', () => {
     invalidateProductCache();
   });
 
-  it('medidas na busca são obrigatórias: "rack 12u x 600 x 600" não traz 600 x 250, 350, 450', async () => {
+  it('medidas e palavras na busca são obrigatórias: "rack 12u x 600 x 600" não traz 600 x 450, 8U nem quadro', async () => {
     await pool.query(
       `INSERT INTO products (id, sku, name, format, kind, search_text) VALUES
          (880041, 'OSTT-061260', 'Rack Outdoor Poste/Piso IP55 12U X 600 X 600mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
          (880042, 'OSTT-061225-GLM', 'Rack Outdoor Poste IP65 12U X 600 X 250mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
          (880043, 'OSTT-061245', 'Rack Outdoor Poste/Piso IP55 12U X 600 X 450mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
-         (880044, 'OSTT-081260', 'Rack Outdoor Poste/Piso IP55 8U X 600 X 600mm Alumínio', 'S', 'P', '')`,
+         (880044, 'OSTT-081260', 'Rack Outdoor Poste/Piso IP55 8U X 600 X 600mm Alumínio', 'S', 'P', ''),
+         (880045, 'PCTM-A85', 'Quadro de Comando de Sobrepor Aço 12U 600 X 600 X 250mm Aletas Ventilação', 'S', 'P', ''),
+         (880046, 'OSTT-061260-GLM', 'Rack Outdoor Poste/Piso IP65 12U X 600 X 600mm Alumínio, Ventilação de Teto', 'S', 'P', ''),
+         (880047, 'W501260', 'Rack Outdoor Poste/Piso IP55 12U X 600 X 600mm Alumínio Sem Termostato', 'S', 'P', '')`,
     );
     invalidateProductCache();
     const { searchProducts } = await import('../src/stock/productSearch.js');
     for (const q of ['rack 12u x 600 x 600 qual a previsao', 'rack 12U 600x600', 'rack 12 u 600 x 600']) {
-      const found = await searchProducts(q);
-      expect(found.map((x) => x.sku), q).toEqual(['OSTT-061260']);
+      const found = (await searchProducts(q)).map((x) => x.sku);
+      // só racks 12U 600x600: nada de 600 x 450, 8U ou "quadro de comando"
+      expect(found.sort(), q).toEqual(['OSTT-061260', 'OSTT-061260-GLM', 'W501260']);
     }
-    // o assistente responde direto pelo produto certo
+    // o modelo base vem antes das variações
+    expect((await searchProducts('rack 12u 600x600'))[0].sku).toBe('OSTT-061260');
+    // IP65 especificado: só a variação IP65
+    expect((await searchProducts('rack ip65 12u 600x600')).map((x) => x.sku)).toEqual(['OSTT-061260-GLM']);
+    // as opções mostradas trazem o disponível e o que está para chegar
     const r = await answerQuestion('rack 12u x 600 x 600 qual a previsao', [], seller1, null);
-    expect(r.cards.some((c) => c.type === 'candidates')).toBe(false);
+    const cand = r.cards.find((c) => c.type === 'candidates') as { data: { sku: string | null; available?: number }[] } | undefined;
+    expect(cand?.data.map((x) => x.sku)).not.toContain('PCTM-A85');
     expect(JSON.stringify(r)).not.toContain('OSTT-061245');
-    await pool.query('DELETE FROM products WHERE id BETWEEN 880041 AND 880044');
+    await pool.query('DELETE FROM products WHERE id BETWEEN 880041 AND 880047');
     invalidateProductCache();
   });
 
