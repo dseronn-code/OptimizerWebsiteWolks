@@ -162,10 +162,19 @@ export const AUDIT_ACTION: Record<string, string> = {
   'user.create': 'Criou usuário',
   'user.update': 'Alterou usuário',
   'webhook.rejected': 'Aviso do Bling recusado',
+  'purchase.create': 'Pediu compra de produto',
+  'purchase.update': 'Atualizou solicitação de compra',
+  'whatsapp.reservation': 'Reservou pelo WhatsApp',
+  'reservation.cancel': 'Cancelou reserva',
+  'reservation.reject': 'Recusou reserva',
+  'reservation.release': 'Liberou reserva',
+  'alert.ack': 'Marcou alerta em análise',
+  'alert.resolve': 'Resolveu alerta',
 };
 
 const AUDIT_ENTITY: Record<string, string> = {
   user: 'Usuário',
+  purchase_request: 'Solicitação de compra',
   reservation: 'Reserva',
   order: 'Pedido',
   sales_order: 'Pedido',
@@ -218,3 +227,21 @@ export function auditDetails(d: unknown): string {
 export function plural(n: number, one: string, many: string): string {
   return `${num(n)} ${Math.abs(n) === 1 ? one : many}`;
 }
+
+/** Número de WhatsApp legível: +55 (11) 98765-4321. */
+export function formatPhone(d: string | null | undefined): string {
+  if (!d) return '';
+  if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
+    const rest = d.slice(4);
+    return `+55 (${d.slice(2, 4)}) ${rest.slice(0, rest.length - 4)}-${rest.slice(-4)}`;
+  }
+  return `+${d}`;
+}
+
+export const PURCHASE_STATUS: Record<string, string> = {
+  OPEN: 'Aberta',
+  ORDERED: 'Comprado',
+  RECEIVED: 'Recebido',
+  REJECTED: 'Recusada',
+  CANCELLED: 'Cancelada',
+};

@@ -4,15 +4,15 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { ErrorMsg, PageHeader, Table } from '../components/ui';
-import { auditDetails, auditEntity, AUDIT_ACTION, BLING_STATUS, CATEGORY_LABEL, dateTime, JOB_STATUS, JOB_TYPE, SYNC_RESOURCE, SYNC_STATUS, syncOrigin, WEBHOOK_STATUS } from '../format';
+import { auditDetails, auditEntity, AUDIT_ACTION, BLING_STATUS, CATEGORY_LABEL, dateTime, formatPhone, JOB_STATUS, JOB_TYPE, SYNC_RESOURCE, SYNC_STATUS, syncOrigin, WEBHOOK_STATUS } from '../format';
 
-type Tab = 'bling' | 'rules' | 'users' | 'settings' | 'sync' | 'audit';
+type Tab = 'bling' | 'whatsapp' | 'rules' | 'users' | 'settings' | 'sync' | 'audit';
 
 export default function Admin() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const tabs: [Tab, string][] = [
-    ...(isAdmin ? ([['bling', 'Integração Bling']] as [Tab, string][]) : []),
+    ...(isAdmin ? ([['bling', 'Integração Bling'], ['whatsapp', 'WhatsApp']] as [Tab, string][]) : []),
     ['rules', 'Regras de situação'],
     ...(isAdmin ? ([['users', 'Usuários']] as [Tab, string][]) : []),
     ['settings', 'Parâmetros'],
@@ -31,6 +31,7 @@ export default function Admin() {
         ))}
       </div>
       {tab === 'bling' && <BlingTab />}
+      {tab === 'whatsapp' && <WhatsAppTab />}
       {tab === 'rules' && <RulesTab editable={isAdmin} />}
       {tab === 'users' && <UsersTab />}
       {tab === 'settings' && <SettingsTab editable={isAdmin} />}
@@ -102,6 +103,67 @@ function BlingTab() {
         </div>
         <p className="text-xs text-slate-500">Somente leitura: o sistema apenas consulta o Bling. Nenhum pedido, estoque ou movimentação é alterado.</p>
       </div>
+    </div>
+  );
+}
+
+function WhatsAppTab() {
+  const [d, setD] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.get('/api/admin/whatsapp').then(setD).catch((e) => setError(e.message));
+  }, []);
+  if (!d) return <ErrorMsg error={error} />;
+  const items: [string, boolean][] = [
+    ['Token de acesso (WHATSAPP_TOKEN)', d.tokenSet],
+    ['ID do número (WHATSAPP_PHONE_NUMBER_ID)', d.phoneNumberIdSet],
+    ['Token de verificação do webhook (WHATSAPP_VERIFY_TOKEN)', d.verifyTokenSet],
+    ['Chave secreta do app (WHATSAPP_APP_SECRET)', d.appSecretSet],
+  ];
+  const ready = items.every(([, ok]) => ok);
+  return (
+    <div className="space-y-4">
+      <div className={`card p-5 text-sm ${ready ? 'border-emerald-200' : 'border-amber-300'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="section-title">Bot de WhatsApp</h2>
+            <p className="mt-0.5 text-slate-500">
+              Os colaboradores consultam o estoque, fazem reservas e pedem compras pelo WhatsApp. O número de cada um é o login:
+              só números cadastrados em <b>Usuários</b> são atendidos; números desconhecidos não recebem resposta.
+            </p>
+          </div>
+          <span className={`chip ${ready ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-amber-50 text-amber-800 ring-amber-200'}`}>{ready ? 'Configurado' : 'Configuração pendente'}</span>
+        </div>
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {items.map(([label, ok]) => (
+            <li key={label} className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${ok ? 'bg-emerald-500' : 'bg-amber-500'}`} /> {label}: <b>{ok ? 'definido' : 'faltando'}</b></li>
+          ))}
+        </ul>
+        <div className="mt-4">
+          <div className="label">URL do webhook (cadastrar no app da Meta, campo "Callback URL")</div>
+          <div className="break-all rounded-xl bg-slate-50 px-3 py-2 font-mono text-xs ring-1 ring-slate-200">{d.webhookUrl}</div>
+          <p className="mt-1 text-xs text-slate-500">No painel da Meta, assine o campo <b>messages</b> do webhook. Os valores secretos ficam só nas variáveis do servidor (Railway), nunca aqui.</p>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><div className="label">Colaboradores com WhatsApp cadastrado</div><div className="text-2xl font-bold">{d.linkedUsers}</div></div>
+          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><div className="label">Mensagens atendidas (7 dias)</div><div className="text-2xl font-bold">{d.messagesLast7Days}</div></div>
+        </div>
+      </div>
+      <section className="card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-3.5">
+          <h2 className="section-title">Números não cadastrados que tentaram usar o bot (30 dias)</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Eles não receberam resposta. Se for um colaborador, cadastre o número em Usuários.</p>
+        </div>
+        {d.unauthorized.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-slate-500">Nenhuma tentativa.</p>
+        ) : (
+          <Table columns={['Número', 'Tentativas', 'Última']}>
+            {d.unauthorized.map((u: any) => (
+              <tr key={u.phone}><td className="td font-mono text-xs">{u.phone}</td><td className="td tabular-nums">{u.attempts}</td><td className="td text-xs">{dateTime(u.last)}</td></tr>
+            ))}
+          </Table>
+        )}
+      </section>
     </div>
   );
 }
@@ -198,7 +260,7 @@ function RulesTab({ editable }: { editable: boolean }) {
 
 function UsersTab() {
   const [users, setUsers] = useState<any[]>([]);
-  const [form, setForm] = useState({ username: '', name: '', password: '', role: 'vendedor', blingSellerId: '' });
+  const [form, setForm] = useState({ username: '', name: '', password: '', role: 'vendedor', blingSellerId: '', whatsappPhone: '' });
   const [error, setError] = useState<string | null>(null);
   const load = () => api.get<{ users: any[] }>('/api/admin/users').then((r) => setUsers(r.users)).catch((e) => setError(e.message));
   useEffect(() => {
@@ -208,8 +270,8 @@ function UsersTab() {
     e.preventDefault();
     setError(null);
     try {
-      await api.post('/api/admin/users', { ...form, blingSellerId: form.blingSellerId ? Number(form.blingSellerId) : null });
-      setForm({ username: '', name: '', password: '', role: 'vendedor', blingSellerId: '' });
+      await api.post('/api/admin/users', { ...form, blingSellerId: form.blingSellerId ? Number(form.blingSellerId) : null, whatsappPhone: form.whatsappPhone || null });
+      setForm({ username: '', name: '', password: '', role: 'vendedor', blingSellerId: '', whatsappPhone: '' });
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -252,11 +314,12 @@ function UsersTab() {
           <option value="vendedor">Vendedor</option><option value="gestor">Gestor</option><option value="admin">Administrador</option>
         </select></div>
         <div><label className="label" htmlFor="nu-seller" title="Código do vendedor no Bling: liga os pedidos do Bling a este usuário">Cód. vendedor no Bling</label><input id="nu-seller" className="input" inputMode="numeric" placeholder="opcional" value={form.blingSellerId} onChange={(e) => setForm({ ...form, blingSellerId: e.target.value })} /></div>
+        <div className="sm:col-span-2"><label className="label" htmlFor="nu-wa" title="Número que poderá usar o bot de WhatsApp. Sem número, a pessoa não é atendida pelo bot.">WhatsApp (login do bot)</label><input id="nu-wa" className="input" inputMode="tel" placeholder="(11) 98765-4321 — opcional" value={form.whatsappPhone} onChange={(e) => setForm({ ...form, whatsappPhone: e.target.value })} /></div>
         <button className="btn-primary sm:col-span-6 sm:justify-self-end">Criar usuário</button>
       </form>
       <ErrorMsg error={error} />
       <div className="card overflow-hidden">
-        <Table columns={['Usuário', 'Nome', 'Perfil', '2 etapas', 'Cód. vendedor Bling', 'Ativo', '']}>
+        <Table columns={['Usuário', 'Nome', 'Perfil', '2 etapas', 'Cód. vendedor Bling', 'WhatsApp', 'Ativo', '']}>
           {users.map((u) => (
             <tr key={u.id}>
               <td className="td font-mono text-xs">{u.username}</td>
@@ -279,6 +342,20 @@ function UsersTab() {
               </td>
               <td className="td text-xs">{u.mfa_enabled ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">Ativo</span> : <span className="text-slate-400">—</span>}</td>
               <td className="td"><input className="input w-28" inputMode="numeric" aria-label={`Código do vendedor no Bling de ${u.name}`} defaultValue={u.bling_seller_id ?? ''} onBlur={(e) => update(u.id, { blingSellerId: e.target.value ? Number(e.target.value) : null })} /></td>
+              <td className="td">
+                <input
+                  className="input w-44"
+                  inputMode="tel"
+                  placeholder="sem bot"
+                  aria-label={`WhatsApp de ${u.name}`}
+                  defaultValue={u.whatsapp_phone ? formatPhone(u.whatsapp_phone) : ''}
+                  key={u.whatsapp_phone ?? 'none'}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if ((v || null) !== (u.whatsapp_phone ? formatPhone(u.whatsapp_phone) : null)) void update(u.id, { whatsappPhone: v || null });
+                  }}
+                />
+              </td>
               <td className="td"><input type="checkbox" aria-label={`${u.name} ativo`} checked={u.active} onChange={(e) => update(u.id, { active: e.target.checked })} /></td>
               <td className="td">
                 <div className="flex flex-wrap gap-1">

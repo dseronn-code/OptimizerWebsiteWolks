@@ -72,6 +72,7 @@ export default function Product() {
         <button type="button" className="btn-secondary" onClick={() => setShowReserve((v) => !v)}>
           {user?.role === 'vendedor' ? 'Solicitar reserva' : 'Criar reserva'}
         </button>
+        <Link to={`/compras?produto=${data.product.id}`} className="btn-secondary" title="Pedir ao gestor a compra deste produto">Solicitar compra</Link>
       </form>
 
       {showReserve && <ReserveForm productId={data.product.id} deposits={data.byDeposit.filter((d) => !d.ignored)} onDone={() => { setShowReserve(false); void load(); }} />}

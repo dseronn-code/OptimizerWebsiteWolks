@@ -1,5 +1,5 @@
 import { BRAND } from '../brand';
-import { AlertTriangle, BarChart3, Boxes, Bell, Bookmark, ClipboardList, History, LogOut, MessageSquare, Menu, RefreshCw, Settings, X } from 'lucide-react';
+import { AlertTriangle, BarChart3, Boxes, Bell, Bookmark, ClipboardList, History, LogOut, MessageSquare, Menu, RefreshCw, Settings, ShoppingCart, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api } from '../api';
@@ -35,6 +35,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     { to: '/estoque', label: 'Estoque', icon: Boxes },
     { to: '/pedidos', label: 'Compromissos', icon: ClipboardList },
     { to: '/reservas', label: 'Reservas', icon: Bookmark },
+    { to: '/compras', label: 'Compras', icon: ShoppingCart },
     { to: '/alertas', label: 'Alertas', icon: Bell },
     { to: '/historico', label: 'Histórico', icon: History },
     ...(user?.role !== 'vendedor' ? [{ to: '/gestao', label: 'Painel de gestão', icon: BarChart3 }] : []),

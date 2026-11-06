@@ -37,7 +37,7 @@ export default function Orders() {
   const manager = user?.role !== 'vendedor';
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
-      <PageHeader icon={ClipboardList} title="Compromissos comerciais" subtitle="Pedidos do Bling em aberto e como cada um afeta o estoque" />
+      <PageHeader icon={ClipboardList} title="Compromissos comerciais" subtitle={user?.role === 'vendedor' ? 'Os seus pedidos do Bling em aberto e como cada um afeta o estoque' : 'Pedidos do Bling em aberto e como cada um afeta o estoque'} />
       <div className="card mb-4 grid gap-3 p-4 sm:grid-cols-4">
         <div>
           <label className="label">Situação comercial</label>
@@ -51,7 +51,7 @@ export default function Orders() {
         <div><label className="label">Até</label><input type="date" className="input" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></div>
       </div>
       <ErrorMsg error={error} />
-      {orders.length === 0 ? <Empty>Nenhum pedido encontrado.</Empty> : (
+      {orders.length === 0 ? <Empty>{user?.role === 'vendedor' ? 'Nenhum pedido seu encontrado. Seus pedidos aparecem aqui quando o administrador vincula o seu código de vendedor do Bling ao seu usuário.' : 'Nenhum pedido encontrado.'}</Empty> : (
         <div className="card overflow-hidden">
           <Table columns={['Pedido', 'Data', 'Cliente', 'Situação', 'Estoque', 'Itens', ...(manager ? [''] : [])]}>
             {orders.map((o) => (

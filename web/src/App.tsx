@@ -8,6 +8,7 @@ import Assistant from './pages/Assistant';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
 import Login from './pages/Login';
+import Purchases from './pages/Purchases';
 import Orders from './pages/Orders';
 import Product from './pages/Product';
 import Reservations from './pages/Reservations';
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/produtos/:id" element={<Product />} />
         <Route path="/pedidos" element={<Orders />} />
         <Route path="/reservas" element={<Reservations />} />
+        <Route path="/compras" element={<Purchases />} />
         <Route path="/alertas" element={<Alerts />} />
         <Route path="/historico" element={<History />} />
         <Route path="/gestao" element={<Guard roles={['gestor', 'admin']}><Dashboard /></Guard>} />

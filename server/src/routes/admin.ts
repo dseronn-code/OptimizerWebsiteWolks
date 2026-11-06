@@ -1,4 +1,5 @@
-import { normalizePhone, phoneVariants } from '../whatsapp/phone.js';
+import { whatsappConfigured } from '../whatsapp/api.js';
+import { formatPhone, normalizePhone, phoneVariants } from '../whatsapp/phone.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit } from '../audit/audit.js';
@@ -90,6 +91,30 @@ export async function adminRoutes(app: FastifyInstance) {
     if (body.active === false || body.password || body.role || body.revokeSessions) await revokeUserSessions(id);
     await audit({ userId: admin.id, action: 'user.update', entity: 'user', entityId: id, details: { ...body, password: body.password ? '***' : undefined }, ip: req.ip });
     return send(reply, { ok: true });
+  });
+
+  // ------------------------------------------------------------------ WhatsApp
+  app.get('/api/admin/whatsapp', async (req, reply) => {
+    requireUser(req, ['admin']);
+    const { rows: linked } = await pool.query("SELECT COUNT(*)::int AS n FROM users WHERE whatsapp_phone IS NOT NULL AND active");
+    const { rows: blocked } = await pool.query(
+      `SELECT wa_from, COUNT(*)::int AS tentativas, MAX(received_at) AS ultima FROM whatsapp_messages
+       WHERE NOT authorized AND received_at > now() - interval '30 days' GROUP BY wa_from ORDER BY MAX(received_at) DESC LIMIT 20`,
+    );
+    const { rows: usage } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM whatsapp_messages WHERE authorized AND received_at > now() - interval '7 days'",
+    );
+    return send(reply, {
+      configured: whatsappConfigured(),
+      tokenSet: Boolean(config.WHATSAPP_TOKEN),
+      phoneNumberIdSet: Boolean(config.WHATSAPP_PHONE_NUMBER_ID),
+      verifyTokenSet: Boolean(config.WHATSAPP_VERIFY_TOKEN),
+      appSecretSet: Boolean(config.WHATSAPP_APP_SECRET),
+      webhookUrl: `${config.APP_ORIGIN.replace(/\/+$/, '')}/api/webhooks/whatsapp`,
+      linkedUsers: linked[0].n,
+      messagesLast7Days: usage[0].n,
+      unauthorized: blocked.map((b) => ({ phone: formatPhone(b.wa_from), attempts: b.tentativas, last: b.ultima })),
+    });
   });
 
   // ------------------------------------------------------------------ configurações

@@ -112,3 +112,52 @@ Limite: ~100 e-mails por dia (conta Gmail comum). Os e-mails saem do seu Gmail, 
    | `GMAIL_SCRIPT_URL` | a URL do passo 5 |
    | `GMAIL_SCRIPT_SECRET` | a mesma senha do passo 3 |
    | `EMAIL_FROM_NAME` | `ITCOMTECH Estoque` |
+
+## Bot de WhatsApp (API oficial da Meta)
+
+O bot usa a **API oficial do WhatsApp Business (Cloud API)**. Ele precisa de **um número só dele**: o WhatsApp
+de atendimento aos clientes e o grupo interno continuam como estão, sem nenhuma interferência.
+
+**Como o bot funciona**
+- O número de quem manda a mensagem é o login. Só números cadastrados em **Administração › Usuários › WhatsApp**
+  são atendidos. Número desconhecido não recebe resposta nenhuma (nem "lido").
+- Cada colaborador vê só o que é seu, igual ao site: um vendedor não vê clientes, reservas nem pedidos de outro.
+- Funções: consultar produto (disponível para venda), listas de disponíveis/sem estoque, meus pedidos em aberto,
+  reservas (fazer, ver, renovar, cancelar), solicitações de compra e, para gestores, aprovar reservas e atualizar compras.
+- Nada é alterado no Bling.
+
+**1. Número**: um chip pré-pago ou um fixo da empresa que **não** esteja em uso no WhatsApp.
+Enquanto não tiver, use o número de teste gratuito que a Meta oferece (passo 3), que atende até 5 celulares cadastrados.
+
+**2. Conta e app na Meta**
+1. Entre em <https://business.facebook.com> com a conta da empresa (a mesma do WhatsApp de atendimento pode ser usada;
+   o número do bot será outro).
+2. Em <https://developers.facebook.com/apps>, **Criar app** → tipo **Empresa** → vincule ao portfólio da ITCOMTECH.
+3. No app, adicione o produto **WhatsApp** → **Configuração da API**.
+
+**3. Número e token**
+1. Em **Configuração da API**, use o número de teste ou **Adicionar número de telefone** (o número do bot; a Meta confirma por SMS ou ligação).
+2. Copie o **Identificador do número de telefone** → variável `WHATSAPP_PHONE_NUMBER_ID`.
+3. Token permanente: **Configurações do negócio › Usuários do sistema** → criar (Admin) → **Gerar token** para o app,
+   com as permissões `whatsapp_business_messaging` e `whatsapp_business_management` → variável `WHATSAPP_TOKEN`.
+4. **Configurações do app › Básico › Chave secreta do app** → variável `WHATSAPP_APP_SECRET`.
+5. Invente uma frase longa (ex.: `itcomtech-estoque-2026-xyz`) → variável `WHATSAPP_VERIFY_TOKEN`.
+
+**4. Railway**: em **Variables**, crie as quatro variáveis acima e aguarde o novo deploy.
+
+**5. Webhook**
+1. No app da Meta: **WhatsApp › Configuração › Webhook › Editar**.
+2. **URL de retorno**: a que aparece em **Administração › WhatsApp** no sistema (`https://SEU_DOMINIO/api/webhooks/whatsapp`).
+3. **Token de verificação**: a mesma frase do `WHATSAPP_VERIFY_TOKEN` → **Verificar e salvar**.
+4. Em **Campos do webhook**, assine **messages**.
+
+**6. Cadastrar os números**: em **Administração › Usuários**, preencha o WhatsApp de cada colaborador (ex.: `(11) 98765-4321`).
+Para gestores receberem os avisos de reservas e compras, cadastre o número deles também.
+
+**7. Testar**: do celular cadastrado, mande "oi" para o número do bot. Deve chegar o menu com o seu nome.
+
+**Avisos fora de 24 h (opcional)**: a Meta só deixa o bot iniciar conversa com quem falou com ele nas últimas 24 h.
+Para os avisos ao gestor sempre chegarem, crie um modelo de mensagem do tipo **Utilidade**, em português, com um
+único campo no corpo (`{{1}}`), e informe o nome dele em `WHATSAPP_NOTIFY_TEMPLATE`. Sem isso, o aviso também fica em **Alertas** no site.
+
+**Custo**: conversas iniciadas pelo colaborador (ele pergunta, o bot responde) não são cobradas pela Meta.

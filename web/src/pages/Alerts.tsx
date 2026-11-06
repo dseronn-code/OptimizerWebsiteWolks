@@ -18,6 +18,7 @@ interface Alert {
 }
 
 const TYPE_LABEL: Record<string, string> = {
+  PURCHASE_REQUEST: 'Solicitação de compra',
   COMMITTED_WITHOUT_POSTING: 'Pedido sem baixa',
   STALE_OPPORTUNITY: 'Pré-pedido parado',
   RESERVATION_EXPIRING: 'Reserva vencendo',
