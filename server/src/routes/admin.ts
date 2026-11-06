@@ -1,3 +1,4 @@
+import { normalizePhone, phoneVariants } from '../whatsapp/phone.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit } from '../audit/audit.js';
@@ -13,22 +14,39 @@ import { enqueue } from '../sync/jobs.js';
 import { applySuggestedRules } from '../sync/situationSuggestions.js';
 import { ingestEvent, verifySignature } from '../sync/webhooks.js';
 
+/** Número de WhatsApp digitado pelo administrador → dígitos com DDI (ou null para remover). */
+function parsePhone(v: string | null | undefined): string | null {
+  if (v === undefined || v === null || !v.trim()) return null;
+  const phone = normalizePhone(v);
+  if (!phone) throw new HttpError(400, 'Número de WhatsApp inválido. Use DDD + número, ex.: (11) 98765-4321.');
+  return phone;
+}
+
+async function assertPhoneFree(phone: string | null, userId: string | null) {
+  if (!phone) return;
+  const { rows } = await pool.query('SELECT name FROM users WHERE whatsapp_phone = ANY($1::text[]) AND ($2::uuid IS NULL OR id <> $2)', [phoneVariants(phone), userId]);
+  if (rows[0]) throw new HttpError(400, `Este número de WhatsApp já está cadastrado para ${rows[0].name}.`);
+}
+
 export async function adminRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ usuários
   app.get('/api/admin/users', async (req, reply) => {
     requireUser(req, ['admin']);
-    const { rows } = await pool.query('SELECT id, username, name, email, role, bling_seller_id, active, pending_approval, locked_until, created_at, totp_enabled_at IS NOT NULL AS mfa_enabled FROM users ORDER BY pending_approval DESC, name');
+    const { rows } = await pool.query('SELECT id, username, name, email, role, bling_seller_id, whatsapp_phone, active, pending_approval, locked_until, created_at, totp_enabled_at IS NOT NULL AS mfa_enabled FROM users ORDER BY pending_approval DESC, name');
     return send(reply, { users: rows });
   });
 
   app.post('/api/admin/users', async (req, reply) => {
     const admin = requireUser(req, ['admin']);
     const body = parse(
-      z.object({ username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/), name: z.string().trim().min(2).max(120), password: z.string().max(200), role: z.enum(['vendedor', 'gestor', 'admin']), blingSellerId: z.number().int().positive().nullable().optional() }),
+      z.object({ username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/), name: z.string().trim().min(2).max(120), password: z.string().max(200), role: z.enum(['vendedor', 'gestor', 'admin']), blingSellerId: z.number().int().positive().nullable().optional(), whatsappPhone: z.string().max(30).nullable().optional() }),
       req.body,
     );
+    const phone = parsePhone(body.whatsappPhone);
+    await assertPhoneFree(phone, null);
     try {
       const u = await createUser(body);
+      if (phone) await pool.query('UPDATE users SET whatsapp_phone = $2 WHERE id = $1', [u.id, phone]);
       await audit({ userId: admin.id, action: 'user.create', entity: 'user', entityId: u.id, details: { username: u.username, role: u.role }, ip: req.ip });
       return send(reply, { user: u });
     } catch (err) {
@@ -41,7 +59,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const admin = requireUser(req, ['admin']);
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
     const body = parse(
-      z.object({ name: z.string().trim().min(2).max(120).optional(), role: z.enum(['vendedor', 'gestor', 'admin']).optional(), blingSellerId: z.number().int().positive().nullable().optional(), active: z.boolean().optional(), password: z.string().max(200).optional(), approve: z.boolean().optional(), resetMfa: z.boolean().optional(), revokeSessions: z.boolean().optional() }),
+      z.object({ name: z.string().trim().min(2).max(120).optional(), role: z.enum(['vendedor', 'gestor', 'admin']).optional(), blingSellerId: z.number().int().positive().nullable().optional(), active: z.boolean().optional(), password: z.string().max(200).optional(), approve: z.boolean().optional(), resetMfa: z.boolean().optional(), revokeSessions: z.boolean().optional(), whatsappPhone: z.string().max(30).nullable().optional() }),
       req.body,
     );
     if (id === admin.id && (body.active === false || (body.role && body.role !== 'admin'))) throw new HttpError(400, 'Você não pode desativar ou rebaixar o próprio usuário.');
@@ -57,6 +75,12 @@ export async function adminRoutes(app: FastifyInstance) {
        WHERE id = $1`,
       [id, body.name ?? null, body.role ?? null, body.blingSellerId !== undefined, body.blingSellerId ?? null, body.active ?? null, body.password ? await hashPassword(body.password) : null],
     );
+    if (body.whatsappPhone !== undefined) {
+      const phone = parsePhone(body.whatsappPhone);
+      await assertPhoneFree(phone, id);
+      await pool.query('UPDATE users SET whatsapp_phone = $2, updated_at = now() WHERE id = $1', [id, phone]);
+      await pool.query('DELETE FROM whatsapp_sessions WHERE user_id = $1', [id]); // conversa em andamento recomeça
+    }
     if (body.approve !== undefined) {
       // aprovar libera o acesso; recusar mantém a conta desativada
       await pool.query('UPDATE users SET pending_approval = false, active = $2, updated_at = now() WHERE id = $1', [id, body.approve]);

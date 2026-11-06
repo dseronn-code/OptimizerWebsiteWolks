@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { getSessionUser } from './auth/authService.js';
 import { HttpError, SESSION_COOKIE } from './auth/guard.js';
 import { isProduction } from './config.js';
+import { purchaseRoutes } from './routes/purchases.js';
+import { whatsappRoutes } from './routes/whatsapp.js';
 import { adminRoutes } from './routes/admin.js';
 import { coreRoutes } from './routes/core.js';
 import { operationsRoutes } from './routes/operations.js';
@@ -17,7 +19,7 @@ import { stockRoutes } from './routes/stock.js';
 /** Cabeçalho exigido em requisições que alteram estado (defesa adicional contra CSRF). */
 export const CSRF_HEADER = 'x-requested-with';
 export const CSRF_VALUE = 'bling-stock-ai';
-const CSRF_EXEMPT = new Set(['/api/webhooks/bling']);
+const CSRF_EXEMPT = new Set(['/api/webhooks/bling', '/api/webhooks/whatsapp']);
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({
@@ -86,6 +88,8 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(operationsRoutes);
   await app.register(stockRoutes);
   await app.register(adminRoutes);
+  await app.register(purchaseRoutes);
+  await app.register(whatsappRoutes);
 
   // Em produção, serve o frontend compilado (web/dist) com fallback de SPA.
   const webDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');

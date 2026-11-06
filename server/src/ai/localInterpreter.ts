@@ -25,8 +25,13 @@ const STOPWORDS = new Set(
    ai la aqui quantidade tem quanto qtd qtde favor ver pode podem gente empresa loja temos possuimos possui`.split(/\s+/),
 );
 
+/**
+ * Quantidade pedida na pergunta ("consigo vender 20 do X?"). Números colados em letras ou hífen fazem
+ * parte de um código (OSTT-061860, GAV-3, 3M) e nunca são lidos como quantidade.
+ */
 function extractQuantity(q: string): number | null {
-  const m = q.match(/(\d+(?:[.,]\d+)?)\s*(?:unidades?|un\b|und\b|pe[cç]as?|pcs?\b|caixas?|kg|metros?|itens?|x\b)?/i);
+  const re = /(?<![\p{L}\d-])(\d+(?:[.,]\d+)?)(?:\s*(?:unidades?|und|un|pe[cç]as?|pcs?|caixas?|kg|metros?|itens?|x))?(?![\p{L}\d-])/giu;
+  const m = re.exec(q);
   if (!m) return null;
   return Number(m[1].replace(',', '.'));
 }
@@ -230,7 +235,7 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
   }
   // --- venda de quantidade
   const qty = extractQuantity(q);
-  if (qty !== null && /(vend|atender|consig|temos|tem|da pra|possivel|posso|disponi)/.test(q)) {
+  if (qty !== null && (/(vend|atender|consig|da pra|possivel|posso|precis|cabe)/.test(q) || /\b(tem|temos|ha)\s+\d/.test(q))) {
     const term = productOr(['vender', 'disponiveis', 'consigo', 'possivel', 'atender', 'pra', 'da']);
     if (!term) return { answer: 'De qual produto? Informe o SKU ou o nome.', toolCalls: calls };
     const r = await run('verificar_venda', { produto: term, quantidade: qty });

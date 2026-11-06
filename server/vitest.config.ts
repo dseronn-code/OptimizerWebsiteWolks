@@ -13,6 +13,9 @@ export default defineConfig({
       ANTHROPIC_API_KEY: '',
       // Testes nunca chamam IA externa (o .env local pode ter chaves).
       AI_PROVIDER: 'local',
+      WHATSAPP_APP_SECRET: 'segredo-whatsapp-teste',
+      WHATSAPP_VERIFY_TOKEN: 'token-verificacao-teste',
+      WHATSAPP_PHONE_NUMBER_ID: '999000',
     },
   },
 });

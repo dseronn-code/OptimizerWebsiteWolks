@@ -52,6 +52,13 @@ const schema = z.object({
   ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   // Provedor de IA: 'auto' usa Anthropic se houver ANTHROPIC_API_KEY, senão um provedor compatível com
   // OpenAI se houver AI_BASE_URL + AI_API_KEY (ex.: Groq, Google Gemini — planos gratuitos), senão o local.
+  // WhatsApp (API oficial da Meta — WhatsApp Business Cloud API)
+  WHATSAPP_TOKEN: z.string().optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  WHATSAPP_API_VERSION: z.string().default('v23.0'),
+  WHATSAPP_API_BASE_URL: z.string().default('https://graph.facebook.com'),
   AI_PROVIDER: z.enum(['auto', 'anthropic', 'openai_compat', 'local']).default('auto'),
   AI_BASE_URL: z.string().optional(),
   AI_API_KEY: z.string().optional(),
