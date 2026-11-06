@@ -11,7 +11,7 @@ import { checkSale } from '../engine/availability.js';
 import { parse } from '../lib/http.js';
 import { getSettings } from '../lib/settings.js';
 import { searchProducts } from '../stock/productSearch.js';
-import { getAvailability } from '../stock/stockService.js';
+import { getAvailability, strictSeller } from '../stock/stockService.js';
 
 function setSessionCookie(reply: FastifyReply, token: string, expires: Date) {
   reply.setCookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.COOKIE_SECURE ?? isProduction, path: '/', expires });
@@ -168,13 +168,16 @@ export async function coreRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/products/:id/orders', async (req, reply) => {
-    requireUser(req);
+    const user = requireUser(req);
     const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), req.params);
+    const v = viewerOf(user);
+    const ownSeller = strictSeller(v, await getSettings()) ? v.blingSellerId ?? -1 : null;
     const { rows } = await pool.query(
       `SELECT o.id, o.number, o.order_date, o.expected_date, s.name AS situation, i.quantity
        FROM sales_order_items i JOIN sales_orders o ON o.id = i.order_id LEFT JOIN situations s ON s.id = o.situation_id
-       WHERE i.product_id = $1 AND NOT o.deleted ORDER BY o.order_date DESC NULLS LAST LIMIT 100`,
-      [id],
+       WHERE i.product_id = $1 AND NOT o.deleted AND ($2::bigint IS NULL OR o.seller_id = $2)
+       ORDER BY o.order_date DESC NULLS LAST LIMIT 100`,
+      [id, ownSeller],
     );
     return send(reply, { orders: rows });
   });

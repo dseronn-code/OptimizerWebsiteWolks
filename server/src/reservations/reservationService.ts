@@ -6,7 +6,7 @@ import { calculateAvailability } from '../engine/availability.js';
 import { pl } from '../lib/labels.js';
 import { getSettings } from '../lib/settings.js';
 import { loadEngineInput } from '../stock/repository.js';
-import type { Viewer } from '../stock/stockService.js';
+import { strictSeller, type Viewer } from '../stock/stockService.js';
 
 /**
  * Módulo complementar de reservas (somente no banco próprio — nada é escrito no Bling).
@@ -226,6 +226,8 @@ export async function expireReservations(): Promise<{ expired: number; converted
 }
 
 export async function listReservations(filters: { status?: string; productId?: number; sellerUserId?: string; customer?: string }, viewer: Viewer) {
+  // vendedor só enxerga as próprias reservas (nem a existência das reservas dos colegas)
+  if (strictSeller(viewer, await getSettings())) filters = { ...filters, sellerUserId: viewer.id };
   const where: string[] = [];
   const params: unknown[] = [];
   if (filters.status) {
@@ -259,7 +261,11 @@ export async function listReservations(filters: { status?: string; productId?: n
   );
 }
 
-export async function reservationHistory(id: string) {
+export async function reservationHistory(id: string, viewer?: Viewer) {
+  if (viewer && strictSeller(viewer, await getSettings())) {
+    const { rows } = await pool.query('SELECT seller_user_id FROM reservations WHERE id = $1', [id]);
+    if (!rows[0] || rows[0].seller_user_id !== viewer.id) throw new ReservationError('Reserva não encontrada.', 404);
+  }
   const { rows } = await pool.query(
     `SELECT h.*, u.name AS user_name FROM reservation_history h LEFT JOIN users u ON u.id = h.user_id
      WHERE h.reservation_id = $1 ORDER BY h.at`,

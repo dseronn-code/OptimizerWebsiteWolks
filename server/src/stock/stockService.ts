@@ -142,15 +142,38 @@ export function canSeeCustomer(line: Pick<ExplanationLine, 'sellerId' | 'sellerU
   return false;
 }
 
-export function applyPrivacy<T extends { lines: ExplanationLine[] }>(result: T, viewer: Viewer, settings: AppSettings): T {
-  return {
-    ...result,
-    lines: result.lines.map((l) =>
-      l.customerName && !canSeeCustomer(l, viewer, settings)
-        ? { ...l, customerName: 'Cliente de outro vendedor', label: l.label.replace(/ — .*$/, ' — cliente de outro vendedor') }
-        : l,
-    ),
-  };
+/** Vendedor com privacidade estrita: vê só o que é dele (pedidos, reservas, clientes, avisos). */
+export function strictSeller(viewer: Viewer, settings: AppSettings): boolean {
+  return viewer.role === 'vendedor' && !settings.privacy.sellersSeeAllCustomers;
+}
+
+/**
+ * Esconde, para o vendedor, tudo que identifica pedidos e reservas de outros vendedores: cliente, número do
+ * pedido, situação e avisos ligados a eles. A quantidade continua no cálculo (o disponível precisa fechar),
+ * mas aparece só como "compromisso de outro vendedor".
+ */
+export function applyPrivacy<T extends { lines: ExplanationLine[]; issues: { refId?: string; message: string }[] }>(result: T, viewer: Viewer, settings: AppSettings): T {
+  if (!strictSeller(viewer, settings)) return result;
+  const hidden = new Set<string>();
+  const lines = result.lines.map((l) => {
+    if ((l.kind !== 'ORDER' && l.kind !== 'RESERVATION') || canSeeCustomer(l, viewer, settings)) return l;
+    hidden.add(l.refId);
+    return {
+      ...l,
+      label: l.kind === 'ORDER' ? 'Pedido de outro vendedor' : 'Reserva de outro vendedor',
+      customerName: null,
+      situationName: null,
+      orderNumber: null,
+      orderId: null,
+      refId: `hidden:${hidden.size}`,
+    };
+  });
+  const issues = result.issues.map((i) =>
+    i.refId && hidden.has(i.refId)
+      ? { ...i, refId: undefined, message: 'Há um compromisso de outro vendedor neste produto que precisa de revisão do gestor.' }
+      : i,
+  );
+  return { ...result, lines, issues };
 }
 
 export async function productSummaries(productIds: number[], viewer?: Viewer) {

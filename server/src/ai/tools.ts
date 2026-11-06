@@ -9,7 +9,7 @@ import { normalize } from '../lib/text.js';
 import { upsertAlert } from '../alerts/alertService.js';
 import { searchProducts, type ProductMatch } from '../stock/productSearch.js';
 import { stockOverview } from '../stock/overview.js';
-import { canSeeCustomer, getAvailability, type AvailabilityResponse, type Viewer } from '../stock/stockService.js';
+import { canSeeCustomer, getAvailability, strictSeller, type AvailabilityResponse, type Viewer } from '../stock/stockService.js';
 
 /**
  * Ferramentas de consulta disponibilizadas à IA.
@@ -238,7 +238,8 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       );
       const visibleRes = res.filter((r) => canSeeCustomer({ sellerId: null, sellerUserId: r.seller_user_id }, ctx.viewer, settings));
       const visibleOrd = ord.filter((o) => canSeeCustomer({ sellerId: o.seller_id, sellerUserId: null }, ctx.viewer, settings));
-      const hidden = res.length - visibleRes.length + ord.length - visibleOrd.length;
+      // vendedor não fica sabendo nem que existem registros de colegas para esse cliente
+      const hidden = strictSeller(ctx.viewer, settings) ? 0 : res.length - visibleRes.length + ord.length - visibleOrd.length;
       const rows: (string | number | null)[][] = [
         ...visibleRes.map((r) => ['Reserva', r.customer_name, `${r.sku ?? ''} ${r.name}`, r.quantity, r.status, r.seller]),
         ...visibleOrd.map((o) => [`Pedido ${o.number ?? o.id}`, o.customer_name, `${o.sku ?? ''} ${o.name ?? ''}`, o.quantity, o.situacao ?? o.category, null]),
@@ -264,7 +265,11 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
          WHERE NOT o.deleted AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'OPPORTUNITY', 'UNMAPPED')
          GROUP BY o.id, s.name, r1.category, r2.category ORDER BY o.order_date NULLS LAST LIMIT 300`,
       );
-      const filtered = rows.filter((o) => (cat ? o.category === cat : normalize(o.situacao).includes(q))).slice(0, 50);
+      const strict = strictSeller(ctx.viewer, settings);
+      const filtered = rows
+        .filter((o) => (cat ? o.category === cat : normalize(o.situacao).includes(q)))
+        .filter((o) => !strict || canSeeCustomer({ sellerId: o.seller_id, sellerUserId: null }, ctx.viewer, settings))
+        .slice(0, 50);
       const out = filtered.map((o) => ({
         pedido: o.number ?? o.id,
         cliente: canSeeCustomer({ sellerId: o.seller_id, sellerUserId: null }, ctx.viewer, settings) ? o.customer_name : 'Cliente de outro vendedor',
@@ -280,9 +285,12 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
     case 'produtos_com_divergencia': {
       const { rows } = await pool.query(
         `SELECT a.type, a.severity, a.message, a.product_id, p.sku, p.name FROM alerts a LEFT JOIN products p ON p.id = a.product_id
-         WHERE a.status <> 'resolved' AND a.type IN ('NEGATIVE_BALANCE', 'OVERCOMMITTED', 'POSSIBLE_DUPLICATE', 'UNMAPPED_SITUATION',
-           'CANCELLED_AFTER_POSTING', 'CANCELLED_WITH_ACTIVE_RESERVATION', 'COMMITTED_WITHOUT_POSTING', 'PARTIAL_DELIVERY_NOT_POSTED')
+         WHERE a.status <> 'resolved' AND a.type = ANY($1::text[])
          ORDER BY CASE a.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, a.updated_at DESC LIMIT 50`,
+        // para o vendedor, só divergências que não citam clientes nem pedidos de colegas
+        [strictSeller(ctx.viewer, settings)
+          ? ['NEGATIVE_BALANCE', 'OVERCOMMITTED', 'UNMAPPED_SITUATION']
+          : ['NEGATIVE_BALANCE', 'OVERCOMMITTED', 'POSSIBLE_DUPLICATE', 'UNMAPPED_SITUATION', 'CANCELLED_AFTER_POSTING', 'CANCELLED_WITH_ACTIVE_RESERVATION', 'COMMITTED_WITHOUT_POSTING', 'PARTIAL_DELIVERY_NOT_POSTED']],
       );
       if (rows.length) ctx.cards.push({ type: 'table', title: 'Divergências abertas', columns: ['Gravidade', 'Tipo', 'Produto', 'Descrição'], rows: rows.map((r) => [SEVERITY_LABEL[r.severity] ?? r.severity, ISSUE_TYPE_LABEL[r.type] ?? r.type, r.sku ?? r.name ?? '—', r.message]) });
       return { total: rows.length, divergencias: rows.map((r) => ({ tipo: ISSUE_TYPE_LABEL[r.type] ?? r.type, gravidade: SEVERITY_LABEL[r.severity] ?? r.severity, produto: r.sku ?? r.name, descricao: r.message })) };
@@ -296,7 +304,9 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
          ORDER BY r.expires_at LIMIT 100`,
         [String(hours)],
       );
-      const out = rows.map((r) => ({
+      const out = rows
+        .filter((r) => !strictSeller(ctx.viewer, settings) || r.seller_user_id === ctx.viewer.id)
+        .map((r) => ({
         produto: `${r.sku ?? ''} ${r.name}`.trim(),
         quantidade: r.quantity,
         cliente: canSeeCustomer({ sellerId: null, sellerUserId: r.seller_user_id }, ctx.viewer, settings) ? r.customer_name : 'Cliente de outro vendedor',

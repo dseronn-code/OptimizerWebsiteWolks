@@ -17,7 +17,10 @@ import {
   ReservationError,
 } from '../reservations/reservationService.js';
 import { loadEngineInput, loadSyncHealth } from '../stock/repository.js';
-import { canSeeCustomer } from '../stock/stockService.js';
+import { canSeeCustomer, strictSeller } from '../stock/stockService.js';
+
+/** Alertas gerais que não citam cliente, pedido ou vendedor: podem ser vistos por qualquer vendedor. */
+const SELLER_SAFE_ALERTS = ['NEGATIVE_BALANCE', 'OVERCOMMITTED', 'SYNC_FAILED', 'SYNC_STALE', 'INCOMING_PENDING', 'UNMAPPED_SITUATION'];
 
 const MANAGERS = ['gestor', 'admin'] as const;
 
@@ -78,9 +81,9 @@ export async function operationsRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/reservations/:id/history', async (req, reply) => {
-    requireUser(req);
+    const user = requireUser(req);
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
-    return send(reply, { history: await reservationHistory(id) });
+    return send(reply, { history: await reservationHistory(id, viewerOf(user)) });
   });
 
   // ------------------------------------------------------------------ bloqueios operacionais
@@ -138,6 +141,10 @@ export async function operationsRoutes(app: FastifyInstance) {
       }),
       req.query,
     );
+    const settings = await getSettings();
+    const v = viewerOf(user);
+    // vendedor só vê os próprios pedidos; sem código de vendedor no Bling vinculado, não vê nenhum
+    const ownSeller = strictSeller(v, settings) ? v.blingSellerId ?? -1 : null;
     const { rows } = await pool.query(
       `SELECT o.id, o.number, o.order_date, o.expected_date, o.customer_name, o.seller_id, o.situation_id, s.name AS situation,
               COALESCE(r1.category, r2.category, 'UNMAPPED') AS category,
@@ -155,12 +162,11 @@ export async function operationsRoutes(app: FastifyInstance) {
          AND ($5::bigint IS NULL OR EXISTS (SELECT 1 FROM sales_order_items x WHERE x.order_id = o.id AND x.product_id = $5))
          AND ($6::date IS NULL OR o.order_date >= $6) AND ($7::date IS NULL OR o.order_date <= $7)
          AND ($8 = '0' OR COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'OPPORTUNITY', 'UNMAPPED'))
+         AND ($9::bigint IS NULL OR o.seller_id = $9)
        GROUP BY o.id, s.name, r1.category, r2.category, r1.stock_effect, r2.stock_effect, ov.stock_effect
        ORDER BY o.order_date DESC NULLS LAST LIMIT 300`,
-      [q.category ?? null, q.situationId ?? null, q.customer ?? null, q.sellerId ?? null, q.productId ?? null, q.from ?? null, q.to ?? null, q.openOnly],
+      [q.category ?? null, q.situationId ?? null, q.customer ?? null, q.sellerId ?? null, q.productId ?? null, q.from ?? null, q.to ?? null, q.openOnly, ownSeller],
     );
-    const settings = await getSettings();
-    const v = viewerOf(user);
     return send(reply, {
       orders: rows.map((o) => (canSeeCustomer({ sellerId: o.seller_id, sellerUserId: null }, v, settings) ? o : { ...o, customer_name: 'Cliente de outro vendedor' })),
     });
@@ -208,9 +214,10 @@ export async function operationsRoutes(app: FastifyInstance) {
     const { rows } = await pool.query(
       `SELECT a.*, p.sku, p.name AS product_name FROM alerts a LEFT JOIN products p ON p.id = a.product_id
        WHERE ($1 = 'active' AND a.status <> 'resolved' OR a.status = $1) AND ($2::text IS NULL OR a.type = $2)
-         AND ($3 OR a.user_id IS NULL OR a.user_id = $4)
+         AND ($3 OR a.user_id = $4 OR (a.user_id IS NULL AND a.type = ANY($5::text[])))
        ORDER BY CASE a.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, a.updated_at DESC LIMIT 300`,
-      [q.status, q.type ?? null, user.role !== 'vendedor', user.id],
+      // vendedor: só os próprios alertas e os gerais que não citam clientes/pedidos de ninguém
+      [q.status, q.type ?? null, user.role !== 'vendedor' || (await getSettings()).privacy.sellersSeeAllCustomers, user.id, SELLER_SAFE_ALERTS],
     );
     return send(reply, { alerts: rows });
   });

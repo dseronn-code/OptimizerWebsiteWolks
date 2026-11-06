@@ -291,9 +291,18 @@ describe('API: autenticação, perfis e webhooks', () => {
   it('vendedor não vê o nome do cliente de outro vendedor', async () => {
     await createReservation({ productId: PRODUCT, quantity: 2, customerName: 'Cliente Sigiloso', reason: 'x' }, seller2);
     const asSeller1 = await getAvailability(PRODUCT, { viewer: seller1 });
-    expect(asSeller1?.lines[0].customerName).toBe('Cliente de outro vendedor');
+    const line = asSeller1!.lines.find((l) => l.kind === 'RESERVATION')!;
+    // o vendedor não vê cliente, nem de quem é: só que existe um compromisso que reduz o disponível
+    expect(line.customerName).toBeNull();
+    expect(line.label).toBe('Reserva de outro vendedor');
+    expect(line.subtracted).toBe(2);
+    expect(JSON.stringify(asSeller1)).not.toContain('Cliente Sigiloso');
     const asManager = await getAvailability(PRODUCT, { viewer: manager });
-    expect(asManager?.lines[0].customerName).toBe('Cliente Sigiloso');
+    expect(asManager?.lines.find((l) => l.kind === 'RESERVATION')?.customerName).toBe('Cliente Sigiloso');
+    // nem a lista de reservas do colega aparece para o vendedor
+    const { listReservations } = await import('../src/reservations/reservationService.js');
+    const list = await listReservations({}, seller1);
+    expect(list.every((r: { seller_user_id: string }) => r.seller_user_id === seller1.id)).toBe(true);
   });
 });
 
