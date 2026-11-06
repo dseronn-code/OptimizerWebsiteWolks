@@ -69,7 +69,7 @@ export interface Availability {
   issues: Issue[];
   lines: ExplanationLine[];
   byDeposit: DepositAvailability[];
-  incoming: { purchaseOrderId: number; purchaseOrderNumber: number | null; quantity: number; expectedDate: string | null; supplierName: string | null }[];
+  incoming: { purchaseOrderId: number; purchaseOrderNumber: number | null; quantity: number; expectedDate: string | null; supplierName: string | null; sales?: number; reservations?: number }[];
   incomingTotal: number;
   opportunitiesTotal: number;
   dataAsOf: string | null;

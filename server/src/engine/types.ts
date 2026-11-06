@@ -100,6 +100,10 @@ export interface IncomingEntry {
   quantity: number;
   expectedDate: string | null;
   supplierName: string | null;
+  /** Quanto desta entrada já está vendido (pedidos que o estoque atual não cobre). */
+  sales?: number;
+  /** Quanto desta entrada já está reservado (reservas que o estoque atual não cobre). */
+  reservations?: number;
 }
 
 export type ExpiredReservationPolicy = 'KEEP_UNTIL_REVIEW' | 'AUTO_RELEASE';

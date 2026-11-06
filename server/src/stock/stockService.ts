@@ -1,6 +1,6 @@
 import { getBlingClient } from '../bling/clientFactory.js';
 import { pool } from '../db/pool.js';
-import { calculateAvailability, kitAvailability } from '../engine/availability.js';
+import { calculateAvailability, kitAvailability, allocateIncoming } from '../engine/availability.js';
 import type { AvailabilityResult, ExplanationLine } from '../engine/types.js';
 import { getSettings, type AppSettings } from '../lib/settings.js';
 import { refreshBalances, recordAttempt } from '../sync/syncService.js';
@@ -123,6 +123,7 @@ export async function getAvailability(productId: number, opts: AvailabilityOptio
 
   const response: AvailabilityResponse = {
     ...base,
+    incoming: kit ? base.incoming : allocateIncoming(base.physicalTotal, base.deductions, base.incoming),
     kit,
     refreshed: refresh.refreshed,
     refreshError: refresh.error,

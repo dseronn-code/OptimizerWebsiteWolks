@@ -343,3 +343,24 @@ describe('motor de disponibilidade — prevenção de dupla contagem', () => {
     expect(r.availableForSale).toBe(0.7);
   });
 });
+
+describe('entradas previstas: quanto de cada entrada já está vendido/reservado', () => {
+  it('o que o estoque não cobre vai para as entradas, da mais próxima para a mais distante', async () => {
+    const { allocateIncoming } = await import('../src/engine/availability.js');
+    const incoming = [
+      { purchaseOrderId: 2, purchaseOrderNumber: 2421, quantity: 10, expectedDate: '2026-11-16', supplierName: null },
+      { purchaseOrderId: 1, purchaseOrderNumber: 2420, quantity: 40, expectedDate: '2026-10-30', supplierName: null },
+    ];
+    // físico 10, pedidos 30, reservas 5: faltam 20 de pedidos e 5 de reservas
+    const out = allocateIncoming(10, { committedOrders: 30, preOrderReservations: 0, localReservations: 5, blocked: 0, uncertain: 0 }, incoming);
+    expect(out.find((e) => e.purchaseOrderId === 1)).toMatchObject({ sales: 20, reservations: 5 });
+    expect(out.find((e) => e.purchaseOrderId === 2)).toMatchObject({ sales: 0, reservations: 0 });
+    // estoque cobre tudo: nada comprometido nas entradas
+    const ok = allocateIncoming(50, { committedOrders: 30, preOrderReservations: 0, localReservations: 5, blocked: 0, uncertain: 0 }, incoming);
+    expect(ok.every((e) => e.sales === 0 && e.reservations === 0)).toBe(true);
+    // estoque negativo conta como zero; demanda maior que a 1ª entrada passa para a 2ª
+    const big = allocateIncoming(-3, { committedOrders: 45, preOrderReservations: 0, localReservations: 4, blocked: 0, uncertain: 0 }, incoming);
+    expect(big.find((e) => e.purchaseOrderId === 1)).toMatchObject({ sales: 40, reservations: 0 });
+    expect(big.find((e) => e.purchaseOrderId === 2)).toMatchObject({ sales: 5, reservations: 4 });
+  });
+});

@@ -433,15 +433,24 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
         ctx.lastProductId = productId;
       }
       const { rows } = await pool.query(
-        `SELECT po.number, po.expected_date, po.supplier_name, p.sku, p.name, i.quantity
+        `SELECT po.id AS po_id, po.number, po.expected_date, po.supplier_name, i.product_id, p.sku, p.name, i.quantity
          FROM purchase_order_items i JOIN purchase_orders po ON po.id = i.purchase_order_id LEFT JOIN products p ON p.id = i.product_id
          WHERE po.situation_value IN (0, 3) AND ($1::bigint IS NULL OR i.product_id = $1) AND ($2::date IS NULL OR po.expected_date <= $2)
          ORDER BY po.expected_date NULLS LAST LIMIT 100`,
         [productId, input.ate ?? null],
       );
-      const out = rows.map((r) => ({ pedido_compra: r.number, previsao: brDate(r.expected_date), fornecedor: r.supplier_name, produto: `${r.sku ?? ''} ${r.name ?? ''}`.trim(), quantidade: r.quantity }));
-      if (out.length) ctx.cards.push({ type: 'table', title: 'Entradas previstas', columns: ['Pedido compra', 'Previsão', 'Fornecedor', 'Produto', 'Qtd'], rows: out.map((o) => [o.pedido_compra, o.previsao, o.fornecedor, o.produto, o.quantidade]) });
-      return { observacao: 'Entradas previstas não aumentam a disponibilidade atual até serem recebidas e lançadas no Bling.', hoje: new Date().toISOString().slice(0, 10), entradas: out };
+      // quanto de cada entrada já está vendido/reservado (o que o estoque atual não cobre), na ordem de chegada
+      const alloc = new Map<string, { sales: number; reservations: number }>();
+      for (const pid of [...new Set(rows.map((r) => r.product_id).filter(Boolean))].slice(0, 60)) {
+        const av = await getAvailability(Number(pid), { viewer: ctx.viewer });
+        for (const e of av?.incoming ?? []) alloc.set(`${pid}:${e.purchaseOrderId}`, { sales: e.sales ?? 0, reservations: e.reservations ?? 0 });
+      }
+      const out = rows.map((r) => {
+        const a = alloc.get(`${r.product_id}:${r.po_id}`) ?? { sales: 0, reservations: 0 };
+        return { pedido_compra: r.number, previsao: brDate(r.expected_date), fornecedor: r.supplier_name, produto: `${r.sku ?? ''} ${r.name ?? ''}`.trim(), quantidade: r.quantity, ja_vendido: a.sales, ja_reservado: a.reservations };
+      });
+      if (out.length) ctx.cards.push({ type: 'table', title: 'Entradas previstas', columns: ['Pedido compra', 'Previsão', 'Fornecedor', 'Produto', 'Qtd', 'Vendas', 'Reservas'], rows: out.map((o) => [o.pedido_compra, o.previsao, o.fornecedor, o.produto, o.quantidade, o.ja_vendido, o.ja_reservado]) });
+      return { observacao: 'Entradas previstas não aumentam a disponibilidade atual até serem recebidas e lançadas no Bling. ja_vendido/ja_reservado = quanto de cada entrada já está comprometido com pedidos/reservas que o estoque atual não cobre.', hoje: new Date().toISOString().slice(0, 10), entradas: out };
     }
     case 'simular_cancelamento': {
       const { rows } = await pool.query(

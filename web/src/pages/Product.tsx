@@ -147,16 +147,25 @@ export default function Product() {
 
       {data.incoming.length > 0 && (
         <section className="card overflow-hidden">
-          <h2 className="border-b border-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-900">Entradas previstas (não contam no disponível)</h2>
-          <Table columns={['Pedido de compra', 'Fornecedor', 'Previsão', 'Quantidade']}>
-            {data.incoming.map((e) => (
-              <tr key={e.purchaseOrderId}>
-                <td className="td">{e.purchaseOrderNumber ?? e.purchaseOrderId}</td>
-                <td className="td">{e.supplierName ?? '—'}</td>
-                <td className="td">{date(e.expectedDate)}</td>
-                <td className="td tabular-nums">{num(e.quantity)}</td>
-              </tr>
-            ))}
+          <div className="border-b border-slate-100 px-5 py-3.5">
+            <h2 className="text-sm font-semibold text-slate-900">Entradas previstas (não contam no disponível)</h2>
+            <p className="mt-0.5 text-xs text-slate-500">Vendas e Reservas: quanto de cada entrada já está comprometido com pedidos e reservas que o estoque atual não cobre. O restante chega livre para venda.</p>
+          </div>
+          <Table columns={['Pedido de compra', 'Fornecedor', 'Previsão', 'Quantidade', 'Vendas', 'Reservas', 'Livre na chegada']}>
+            {data.incoming.map((e) => {
+              const free = Math.max(0, e.quantity - (e.sales ?? 0) - (e.reservations ?? 0));
+              return (
+                <tr key={e.purchaseOrderId}>
+                  <td className="td">{e.purchaseOrderNumber ?? e.purchaseOrderId}</td>
+                  <td className="td">{e.supplierName ?? '—'}</td>
+                  <td className="td">{date(e.expectedDate)}</td>
+                  <td className="td tabular-nums">{num(e.quantity)}</td>
+                  <td className={`td tabular-nums ${e.sales ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{num(e.sales ?? 0)}</td>
+                  <td className={`td tabular-nums ${e.reservations ? 'font-semibold text-sky-700' : 'text-slate-400'}`}>{num(e.reservations ?? 0)}</td>
+                  <td className="td tabular-nums font-semibold text-emerald-700">{num(free)}</td>
+                </tr>
+              );
+            })}
           </Table>
         </section>
       )}

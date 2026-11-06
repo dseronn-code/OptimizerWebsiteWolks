@@ -10,6 +10,7 @@ import type {
   LocalReservation,
   OrderCommitment,
   SaleCheck,
+  IncomingEntry,
 } from './types.js';
 
 /**
@@ -602,4 +603,35 @@ export function kitAvailability(
     if (c.result.status === 'UNCONFIRMED') status = 'UNCONFIRMED';
   }
   return { availableForSale: min === Infinity ? 0 : min, status, limitingComponentId: limiting };
+}
+
+
+/**
+ * Distribui, entre as entradas previstas, o que já está comprometido além do estoque atual.
+ * O estoque físico (descontados os bloqueios) atende primeiro os pedidos, depois as reservas;
+ * o que sobrar de cada um é coberto pelas entradas na ordem de chegada (data prevista).
+ */
+export function allocateIncoming(
+  physical: number | null,
+  d: { committedOrders: number; preOrderReservations: number; localReservations: number; blocked: number; uncertain: number },
+  incoming: IncomingEntry[],
+): IncomingEntry[] {
+  let stock = Math.max(0, (physical ?? 0) - d.blocked);
+  const orders = d.committedOrders + d.preOrderReservations + d.uncertain;
+  const fromStockOrders = Math.min(stock, orders);
+  stock -= fromStockOrders;
+  let salesLeft = orders - fromStockOrders;
+  let resLeft = d.localReservations - Math.min(stock, d.localReservations);
+  const byDate = [...incoming].sort((a, b) => (a.expectedDate ?? '9999') .localeCompare(b.expectedDate ?? '9999') || a.purchaseOrderId - b.purchaseOrderId);
+  const alloc = new Map<number, { sales: number; reservations: number }>();
+  for (const e of byDate) {
+    let free = e.quantity;
+    const sales = Math.min(free, salesLeft);
+    free -= sales;
+    salesLeft -= sales;
+    const reservations = Math.min(free, resLeft);
+    resLeft -= reservations;
+    alloc.set(e.purchaseOrderId, { sales: round(sales), reservations: round(reservations) });
+  }
+  return incoming.map((e) => ({ ...e, ...(alloc.get(e.purchaseOrderId) ?? { sales: 0, reservations: 0 }) }));
 }
