@@ -83,7 +83,7 @@ export async function operationsRoutes(app: FastifyInstance) {
   app.get('/api/reservations/:id/history', async (req, reply) => {
     const user = requireUser(req);
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
-    return send(reply, { history: await reservationHistory(id, viewerOf(user)) });
+    return send(reply, { history: await wrap(reservationHistory(id, viewerOf(user))) });
   });
 
   // ------------------------------------------------------------------ bloqueios operacionais

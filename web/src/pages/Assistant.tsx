@@ -204,7 +204,7 @@ function MessageView({ m, onPick }: { m: Message; onPick: (p: ProductMatch) => v
           c.type === 'candidates' ? (
             <div key={i} className="card overflow-hidden">
               <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
-                Produtos encontrados <span className="font-normal text-slate-500">· toque em um para ver o disponível</span>
+                {c.title ?? 'Produtos encontrados'} <span className="font-normal text-slate-500">· toque em um para ver o disponível</span>
               </div>
               <div className="divide-y divide-slate-100">
                 {c.data.map((p) => (

@@ -99,7 +99,7 @@ export interface ProductMatch {
 
 export type Card =
   | { type: 'availability'; data: Availability; sale?: SaleCheck }
-  | { type: 'candidates'; data: ProductMatch[] }
+  | { type: 'candidates'; data: ProductMatch[]; title?: string }
   | { type: 'table'; title: string; columns: string[]; rows: (string | number | null)[][] };
 
 export interface ChatAnswer {

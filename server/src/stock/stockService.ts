@@ -148,32 +148,52 @@ export function strictSeller(viewer: Viewer, settings: AppSettings): boolean {
 }
 
 /**
- * Esconde, para o vendedor, tudo que identifica pedidos e reservas de outros vendedores: cliente, número do
- * pedido, situação e avisos ligados a eles. A quantidade continua no cálculo (o disponível precisa fechar),
- * mas aparece só como "compromisso de outro vendedor".
+ * Para o vendedor, pedidos e reservas de outros colaboradores não aparecem: viram UMA linha agregada
+ * ("Demais compromissos"), sem cliente, número, situação nem dono. O total continua no cálculo para o
+ * disponível fechar. Avisos ligados a esses compromissos viram um aviso neutro.
  */
 export function applyPrivacy<T extends { lines: ExplanationLine[]; issues: { refId?: string; message: string }[] }>(result: T, viewer: Viewer, settings: AppSettings): T {
   if (!strictSeller(viewer, settings)) return result;
   const hidden = new Set<string>();
-  const lines = result.lines.map((l) => {
-    if ((l.kind !== 'ORDER' && l.kind !== 'RESERVATION') || canSeeCustomer(l, viewer, settings)) return l;
+  const visible: ExplanationLine[] = [];
+  let qty = 0;
+  let subtracted = 0;
+  for (const l of result.lines) {
+    if ((l.kind !== 'ORDER' && l.kind !== 'RESERVATION') || canSeeCustomer(l, viewer, settings)) {
+      visible.push(l);
+      continue;
+    }
     hidden.add(l.refId);
-    return {
-      ...l,
-      label: l.kind === 'ORDER' ? 'Pedido de outro vendedor' : 'Reserva de outro vendedor',
+    qty += l.quantity;
+    subtracted += l.subtracted;
+  }
+  if (hidden.size) {
+    visible.push({
+      kind: 'ORDER',
+      refId: 'others',
+      label: 'Demais compromissos (pedidos e reservas)',
+      depositId: null,
+      depositAssumed: false,
+      quantity: Math.round(qty * 10000) / 10000,
+      subtracted: Math.round(subtracted * 10000) / 10000,
+      treatment: subtracted > 0 ? 'SUBTRACTED' : 'NOT_COUNTED',
+      bucket: null,
+      reason: 'Pedidos e reservas em aberto que já reduzem o disponível.',
       customerName: null,
+      sellerId: null,
+      sellerUserId: null,
       situationName: null,
       orderNumber: null,
       orderId: null,
-      refId: `hidden:${hidden.size}`,
-    };
-  });
-  const issues = result.issues.map((i) =>
-    i.refId && hidden.has(i.refId)
-      ? { ...i, refId: undefined, message: 'Há um compromisso de outro vendedor neste produto que precisa de revisão do gestor.' }
-      : i,
-  );
-  return { ...result, lines, issues };
+      expiresAt: null,
+      uncertain: false,
+    });
+  }
+  const seen = new Set<string>();
+  const issues = result.issues
+    .map((i) => (i.refId && hidden.has(i.refId) ? { ...i, refId: undefined, message: 'Há um compromisso neste produto que precisa de revisão do gestor.' } : i))
+    .filter((i) => (seen.has(i.message) ? false : (seen.add(i.message), true)));
+  return { ...result, lines: visible, issues };
 }
 
 export async function productSummaries(productIds: number[], viewer?: Viewer) {

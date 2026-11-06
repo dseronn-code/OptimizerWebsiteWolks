@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { aiProvider, config } from '../config.js';
 import { answerWithOpenAiCompatible } from './openaiCompatAgent.js';
 import { MAX_ITERATIONS, SYSTEM_PROMPT } from './prompt.js';
-import { interpretLocally } from './localInterpreter.js';
+import { asksAboutColleague, interpretLocally, NO_INFO_ANSWER } from './localInterpreter.js';
 import { executeTool, toolDescriptions, toolSchemas, type Card, type ToolContext, type ToolName } from './tools.js';
 import type { Viewer } from '../stock/stockService.js';
 
@@ -66,6 +66,10 @@ export async function answerQuestion(
   lastProductId: number | null,
 ): Promise<ChatAnswer> {
   const ctx: ToolContext = { viewer, cards: [], lastProductId };
+  // perguntas sobre outro colaborador nem chegam à IA (não há como "convencê-la" a contar)
+  if (await asksAboutColleague(question, viewer)) {
+    return { answer: NO_INFO_ANSWER, cards: [], toolCalls: [], engine: 'local', lastProductId };
+  }
   const provider = aiProvider();
   if (provider === 'local') {
     const local = await interpretLocally(question, ctx);

@@ -291,10 +291,11 @@ describe('API: autenticação, perfis e webhooks', () => {
   it('vendedor não vê o nome do cliente de outro vendedor', async () => {
     await createReservation({ productId: PRODUCT, quantity: 2, customerName: 'Cliente Sigiloso', reason: 'x' }, seller2);
     const asSeller1 = await getAvailability(PRODUCT, { viewer: seller1 });
-    const line = asSeller1!.lines.find((l) => l.kind === 'RESERVATION')!;
-    // o vendedor não vê cliente, nem de quem é: só que existe um compromisso que reduz o disponível
+    // o vendedor não vê o pedido/reserva do colega: só um total agregado que reduz o disponível
+    expect(asSeller1!.lines.some((l) => l.kind === 'RESERVATION')).toBe(false);
+    const line = asSeller1!.lines.find((l) => l.refId === 'others')!;
+    expect(line.label).toBe('Demais compromissos (pedidos e reservas)');
     expect(line.customerName).toBeNull();
-    expect(line.label).toBe('Reserva de outro vendedor');
     expect(line.subtracted).toBe(2);
     expect(JSON.stringify(asSeller1)).not.toContain('Cliente Sigiloso');
     const asManager = await getAvailability(PRODUCT, { viewer: manager });
@@ -353,6 +354,44 @@ describe('interpretador local: perguntas gerais', () => {
     await pool.query('DELETE FROM stock_balances WHERE product_id IN (880011, 880012, 880013)');
     await pool.query('DELETE FROM products WHERE id IN (880011, 880012, 880013)');
     invalidateStockOverview();
+  });
+
+  it('código exato responde só ele; código inexistente sugere só códigos parecidos; pai de variações lista as variações', async () => {
+    await pool.query(
+      `INSERT INTO products (id, parent_id, sku, name, format, kind, search_text) VALUES
+         (880021, NULL, 'OSTT-061545', 'Rack Outdoor IP55 12U', 'S', 'P', ''),
+         (880022, NULL, 'ITC-OPD0085000033', 'Teto Chapeu Alumínio Para Rack Outdoor OSTT Avulso', 'S', 'P', ''),
+         (880023, NULL, 'ITC-OPD0045000033', 'Teto Chapeu 600mm Para Rack Outdoor OSTT Avulso', 'S', 'P', ''),
+         (880030, NULL, 'OSTT-077700', 'Rack Outdoor (pai)', 'V', 'P', ''),
+         (880031, 880030, 'OSTT-077700-P', 'Rack Outdoor Preto', 'S', 'P', ''),
+         (880032, 880030, 'OSTT-077700-B', 'Rack Outdoor Bege', 'S', 'P', '')`,
+    );
+    invalidateProductCache();
+    const { resolveProduct } = await import('../src/ai/tools.js');
+    const ctx = { viewer: seller1, cards: [], lastProductId: null };
+    // exato (maiúsculas/minúsculas não importam): só ele, nada de "Teto Chapeu … OSTT"
+    const exact = await resolveProduct('ostt-061545', ctx);
+    expect('product' in exact && exact.product.id).toBe(880021);
+    // não existe, mas parece: "você quis dizer" só com códigos parecidos
+    const typo = await resolveProduct('ostt-06154456', ctx);
+    expect('notFound' in typo).toBe(true);
+    const sug = (typo as { suggestions?: { sku: string | null }[] }).suggestions ?? [];
+    expect(sug.map((x) => x.sku)).toContain('OSTT-061545');
+    expect(sug.some((x) => x.sku?.startsWith('ITC-'))).toBe(false);
+    // não existe e não parece com nada: sem sugestões
+    const none = await resolveProduct('ZZQ-998877', ctx);
+    expect('notFound' in none && (none.suggestions ?? []).length).toBe(0);
+    // código do produto-pai: mostra as variações
+    const parent = await resolveProduct('OSTT-077700', ctx);
+    expect('ambiguous' in parent && parent.ambiguous.map((x) => x.sku).sort()).toEqual(['OSTT-077700-B', 'OSTT-077700-P']);
+    // resposta do assistente para o código exato não oferece outros produtos
+    const r = await answerQuestion('ostt-061545', [], seller1, null);
+    expect(r.cards.some((c) => c.type === 'candidates')).toBe(false);
+    const r2 = await answerQuestion('ostt-06154456', [], seller1, null);
+    expect(r2.answer).toMatch(/Você quis dizer/);
+    expect(r2.answer).toContain('OSTT-061545');
+    await pool.query('DELETE FROM products WHERE id BETWEEN 880021 AND 880032');
+    invalidateProductCache();
   });
 
   it('produto inexistente gera orientação em vez de erro', async () => {

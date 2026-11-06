@@ -7,7 +7,7 @@ import { brDate, CATEGORY_TEXT, ISSUE_TYPE_LABEL, SEVERITY_LABEL, SYNC_RESOURCE_
 import { getSettings } from '../lib/settings.js';
 import { normalize } from '../lib/text.js';
 import { upsertAlert } from '../alerts/alertService.js';
-import { searchProducts, type ProductMatch } from '../stock/productSearch.js';
+import { findExactSku, looksLikeCode, searchProducts, similarSkus, type ProductMatch } from '../stock/productSearch.js';
 import { stockOverview } from '../stock/overview.js';
 import { canSeeCustomer, getAvailability, strictSeller, type AvailabilityResponse, type Viewer } from '../stock/stockService.js';
 
@@ -27,7 +27,7 @@ export interface ToolContext {
 
 export type Card =
   | { type: 'availability'; data: AvailabilityResponse; sale?: ReturnType<typeof checkSale> }
-  | { type: 'candidates'; data: ProductMatch[] }
+  | { type: 'candidates'; data: ProductMatch[]; title?: string }
   | { type: 'table'; title: string; columns: string[]; rows: (string | number | null)[][] };
 
 const productRef = z.string().min(1).max(120).describe('SKU, código, nome (mesmo incompleto ou com erro de digitação) ou id do produto');
@@ -56,7 +56,7 @@ export const toolSchemas = {
 export type ToolName = keyof typeof toolSchemas;
 
 export const toolDescriptions: Record<ToolName, string> = {
-  buscar_produto: 'Localiza produtos por SKU/nome tolerando erros de digitação. Use quando o produto citado for ambíguo.',
+  buscar_produto: 'Localiza um produto por SKU ou nome. Código exato devolve só aquele produto; código inexistente devolve só códigos parecidos ("você quis dizer").',
   consultar_disponibilidade:
     'Calcula a disponibilidade efetiva de um produto: estoque físico, virtual, compromissos (pedidos pagos, pré-pedidos, reservas, bloqueios), disponível para nova venda, visão por depósito, atualidade dos dados e avisos.',
   verificar_venda: 'Verifica se é possível vender uma quantidade de um produto agora, com o saldo restante após a venda. Atualiza o saldo no Bling se estiver desatualizado.',
@@ -71,7 +71,10 @@ export const toolDescriptions: Record<ToolName, string> = {
   status_sincronizacao: 'Informa a última sincronização com o Bling e falhas recentes.',
 };
 
-type ResolveResult = { product: ProductMatch } | { ambiguous: ProductMatch[] } | { notFound: true };
+type ResolveResult =
+  | { product: ProductMatch }
+  | { ambiguous: ProductMatch[]; variationsOf?: ProductMatch }
+  | { notFound: true; suggestions?: ProductMatch[] };
 
 export async function resolveProduct(ref: string, ctx: ToolContext): Promise<ResolveResult> {
   const trimmed = ref.trim();
@@ -79,16 +82,28 @@ export async function resolveProduct(ref: string, ctx: ToolContext): Promise<Res
     const { rows } = await pool.query('SELECT id, sku, name, format, active FROM products WHERE id = $1', [ctx.lastProductId]);
     if (rows[0]) return { product: { ...rows[0], score: 1 } };
   }
+  // 1) código exatamente igual a um SKU: responde só ele (ou as variações, se for um produto-pai)
+  const exact = await findExactSku(trimmed);
+  if (exact && 'product' in exact) return { product: exact.product };
+  if (exact && 'variations' in exact) {
+    if (!exact.variations.length) return { notFound: true };
+    return { ambiguous: exact.variations, variationsOf: exact.parent };
+  }
   if (/^\d+$/.test(trimmed)) {
-    const { rows } = await pool.query('SELECT id, sku, name, format, active FROM products WHERE id = $1 OR lower(sku) = lower($2) LIMIT 2', [Number(trimmed), trimmed]);
+    const { rows } = await pool.query("SELECT id, sku, name, format, active FROM products WHERE id = $1 AND format <> 'V'", [Number(trimmed)]);
     if (rows.length === 1) return { product: { ...rows[0], score: 1 } };
   }
+  // 2) parece um código mas não existe: só sugere códigos parecidos ("você quis dizer…")
+  if (looksLikeCode(trimmed)) {
+    const suggestions = await similarSkus(trimmed);
+    return { notFound: true, suggestions };
+  }
+  // 3) nome ou parte do nome: busca tolerante a erros
   const matches = await searchProducts(trimmed, 6);
   if (matches.length === 0) return { notFound: true };
   const [first, second] = matches;
-  // SKU idêntico ao digitado sempre vence (ex.: "OSTT-061860" não é ambíguo com "OSTT-061860-GLM")
-  const exact = matches.filter((m) => m.score >= 1);
-  if (exact.length === 1) return { product: exact[0] };
+  const exactName = matches.filter((m) => m.score >= 1);
+  if (exactName.length === 1) return { product: exactName[0] };
   // tolerância: 1 − 0,92 dá 0,0799… em ponto flutuante
   if (first.score >= 0.9 && (!second || first.score - second.score >= 0.08 - 1e-9)) return { product: first };
   if (matches.length === 1 && first.score >= 0.6) return { product: first };
@@ -129,6 +144,43 @@ function searchRanker(query: string, texts: string[]) {
     }
     return score;
   };
+}
+
+/** Produto inexistente: mensagem clara e, se for um código parecido com outro, as sugestões ("você quis dizer"). */
+function notFoundReply(res: Extract<ResolveResult, { notFound: true }>, ref: string, ctx: ToolContext) {
+  const code = looksLikeCode(ref);
+  if (res.suggestions?.length) {
+    ctx.cards.push({ type: 'candidates', data: res.suggestions, title: 'Você quis dizer?' });
+    return {
+      erro: `Não existe produto com o código "${ref.trim()}".`,
+      voce_quis_dizer: res.suggestions.map((m) => ({ sku: m.sku, nome: m.name })),
+      instrucao: 'Diga que o código não foi encontrado e pergunte se o vendedor quis dizer um dos códigos sugeridos. Não mostre outros produtos.',
+    };
+  }
+  return { erro: code ? `Não existe produto com o código "${ref.trim()}" e nenhum código parecido.` : `Nenhum produto encontrado para "${ref.trim()}".` };
+}
+
+/** Produtos com pedidos/reservas em aberto DO PRÓPRIO vendedor, com a quantidade dele. */
+async function ownCommitments(ctx: ToolContext) {
+  const { rows } = await pool.query(
+    `SELECT p.sku, p.name AS nome, SUM(x.qty)::float AS quantidade, SUM(x.pedidos)::int AS pedidos, SUM(x.reservas)::int AS reservas
+     FROM (
+       SELECT i.product_id, i.quantity AS qty, 1 AS pedidos, 0 AS reservas
+       FROM sales_orders o JOIN sales_order_items i ON i.order_id = o.id
+       LEFT JOIN situations s ON s.id = o.situation_id
+       LEFT JOIN situation_rules r1 ON r1.situation_id = o.situation_id LEFT JOIN situation_rules r2 ON r2.situation_id = s.inherited_id
+       WHERE NOT o.deleted AND o.seller_id = $1
+         AND COALESCE(r1.category, r2.category, 'UNMAPPED') IN ('COMMITTED', 'PRE_ORDER_RESERVED', 'UNMAPPED')
+       UNION ALL
+       SELECT r.product_id, r.quantity, 0, 1 FROM reservations r WHERE r.seller_user_id = $2 AND r.status IN ('PENDING', 'ACTIVE', 'EXPIRED')
+     ) x JOIN products p ON p.id = x.product_id
+     GROUP BY p.id ORDER BY quantidade DESC LIMIT 50`,
+    [ctx.viewer.blingSellerId ?? -1, ctx.viewer.id],
+  );
+  if (rows.length) {
+    ctx.cards.push({ type: 'table', title: 'Seus produtos com pedidos ou reservas em aberto', columns: ['SKU', 'Produto', 'Quantidade', 'Pedidos', 'Reservas'], rows: rows.map((r) => [r.sku, r.nome, r.quantidade, r.pedidos, r.reservas]) });
+  }
+  return { filtro: 'comprometidos', titulo: 'Seus produtos com pedidos ou reservas em aberto', total_encontrado: rows.length, exibidos: rows.length, produtos: rows };
 }
 
 const LIST_TITLE: Record<string, string> = {
@@ -204,10 +256,17 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
 
   const withProduct = async (ref: string, fn: (p: ProductMatch) => Promise<unknown>) => {
     const res = await resolveProduct(ref, ctx);
-    if ('notFound' in res) return { erro: `Nenhum produto encontrado para "${ref}".` };
+    if ('notFound' in res) return notFoundReply(res, ref, ctx);
     if ('ambiguous' in res) {
-      ctx.cards.push({ type: 'candidates', data: res.ambiguous });
-      return { ambiguo: true, mensagem: 'Mais de um produto corresponde. Peça ao vendedor para escolher.', candidatos: res.ambiguous.map((m) => ({ id: m.id, sku: m.sku, nome: m.name })) };
+      const title = res.variationsOf ? `${res.variationsOf.sku ?? ref} tem variações — escolha uma` : undefined;
+      ctx.cards.push({ type: 'candidates', data: res.ambiguous, title });
+      return {
+        ambiguo: true,
+        mensagem: res.variationsOf
+          ? `O código ${res.variationsOf.sku} tem variações. Mostre-as e peça ao vendedor para escolher uma.`
+          : 'Mais de um produto corresponde. Peça ao vendedor para escolher.',
+        candidatos: res.ambiguous.map((m) => ({ id: m.id, sku: m.sku, nome: m.name })),
+      };
     }
     ctx.lastProductId = res.product.id;
     return fn(res.product);
@@ -215,9 +274,16 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
 
   switch (name as ToolName) {
     case 'buscar_produto': {
-      const m = await searchProducts(input.termo, 8);
-      if (m.length) ctx.cards.push({ type: 'candidates', data: m });
-      return { resultados: m.map((x) => ({ id: x.id, sku: x.sku, nome: x.name, ativo: x.active, semelhanca: x.score })) };
+      // mesma regra do resto do sistema: código exato → só ele; código inexistente → só códigos parecidos
+      const res = await resolveProduct(input.termo, ctx);
+      if ('product' in res) {
+        ctx.lastProductId = res.product.id;
+        return { encontrado: true, produto: { id: res.product.id, sku: res.product.sku, nome: res.product.name, ativo: res.product.active }, instrucao: 'Produto exato. Use apenas este produto; não ofereça outros.' };
+      }
+      if ('notFound' in res) return notFoundReply(res, input.termo, ctx);
+      const title = res.variationsOf ? `${res.variationsOf.sku ?? input.termo} tem variações — escolha uma` : undefined;
+      ctx.cards.push({ type: 'candidates', data: res.ambiguous, title });
+      return { resultados: res.ambiguous.map((x) => ({ id: x.id, sku: x.sku, nome: x.name, ativo: x.active })), instrucao: 'Mostre as opções e peça para escolher.' };
     }
     case 'consultar_disponibilidade':
       return withProduct(input.produto, async (p) => {
@@ -358,11 +424,11 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
       let productId: number | null = null;
       if (input.produto) {
         const res = await resolveProduct(input.produto, ctx);
+        if ('notFound' in res) return notFoundReply(res, input.produto, ctx);
         if ('ambiguous' in res) {
           ctx.cards.push({ type: 'candidates', data: res.ambiguous });
           return { ambiguo: true, candidatos: res.ambiguous.map((m) => ({ sku: m.sku, nome: m.name })) };
         }
-        if ('notFound' in res) return { erro: `Produto "${input.produto}" não encontrado.` };
         productId = res.product.id;
         ctx.lastProductId = productId;
       }
@@ -380,8 +446,10 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
     case 'simular_cancelamento': {
       const { rows } = await pool.query(
         `SELECT o.id, o.number, i.product_id FROM sales_orders o JOIN sales_order_items i ON i.order_id = o.id
-         WHERE NOT o.deleted AND (o.number = $1 OR o.id = $1) AND i.product_id IS NOT NULL`,
-        [input.pedido],
+         WHERE NOT o.deleted AND (o.number = $1 OR o.id = $1) AND i.product_id IS NOT NULL
+           AND ($2::bigint IS NULL OR o.seller_id = $2)`,
+        // vendedor só simula os próprios pedidos; o de outra pessoa simplesmente "não existe" para ele
+        [input.pedido, strictSeller(ctx.viewer, settings) ? ctx.viewer.blingSellerId ?? -1 : null],
       );
       if (!rows.length) return { erro: `Pedido ${input.pedido} não encontrado entre os pedidos sincronizados.` };
       let productIds = [...new Set(rows.map((r) => r.product_id as number))];
@@ -404,6 +472,7 @@ export async function executeTool(name: string, rawInput: unknown, ctx: ToolCont
     case 'listar_produtos': {
       // usa a mesma visão da tela "Estoque": cobre o catálogo inteiro e fica em cache por 60 s
       const filtro = input.filtro ?? 'disponiveis';
+      if (filtro === 'comprometidos' && strictSeller(ctx.viewer, settings)) return ownCommitments(ctx);
       const limite = input.limite ?? 30;
       const all = await stockOverview(null);
       const rank = searchRanker(input.busca ?? '', all.map((i) => `${i.sku ?? ''} ${i.name}`));

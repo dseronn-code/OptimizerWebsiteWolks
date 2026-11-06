@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { pool } from '../db/pool.js';
 import { brDate, CATEGORY_TEXT, pl } from '../lib/labels.js';
 import { normalize } from '../lib/text.js';
 
@@ -34,6 +35,21 @@ function extractQuantity(q: string): number | null {
   const m = re.exec(q);
   if (!m) return null;
   return Number(m[1].replace(',', '.'));
+}
+
+/**
+ * Código de produto na pergunta: letras e números unidos por hífen/ponto/barra ("OSTT-061545", "W0956/00")
+ * ou letras seguidas de 3+ dígitos ("ACESP0005"). "12U", "10un" e quantidades não contam.
+ */
+export function codeIn(question: string): string | null {
+  for (const raw of question.split(/\s+/)) {
+    const t = raw.replace(/^[^\p{L}\d]+|[^\p{L}\d]+$/gu, '');
+    if (t.length < 4 || !/\d/.test(t)) continue;
+    if (/^\d+([.,]\d+)?(un|und|unid|pcs?|pç|x|kg|m|cm|mm)?$/i.test(t)) continue;
+    if (/[\p{L}\d][-./_][\p{L}\d]/u.test(t) && /\p{L}/u.test(t)) return t;
+    if (/^\p{L}{1,8}\d{3,}\p{L}*$/u.test(t)) return t;
+  }
+  return null;
 }
 
 function productTerm(question: string, extraStop: string[] = []): string {
@@ -80,21 +96,51 @@ function availabilityText(r: any, saleMsg?: string): string {
 
 function ambiguousText(res: any): string | null {
   if (res?.ambiguo) {
-    return `Encontrei mais de um produto. Qual deles?\n${res.candidatos.map((c: any) => `• ${c.sku ?? 's/ SKU'} — ${c.nome}`).join('\n')}`;
+    const head = /variações/.test(res.mensagem ?? '') ? `${res.mensagem.split('.')[0]}. Qual delas?` : 'Encontrei mais de um produto. Qual deles?';
+    return `${head}\n${res.candidatos.map((c: any) => `• ${c.sku ?? 's/ SKU'} — ${c.nome}`).join('\n')}`;
+  }
+  if (res?.voce_quis_dizer?.length) {
+    return `${res.erro} Você quis dizer:\n${res.voce_quis_dizer.map((c: any) => `• ${c.sku ?? 's/ SKU'} — ${c.nome}`).join('\n')}`;
   }
   if (res?.erro) return res.erro;
   return null;
 }
 
+/** Primeiros nomes dos outros colaboradores (para perguntas do tipo "pedidos do Cassiano"). */
+async function otherPeopleNames(viewerId: string): Promise<string[]> {
+  const { rows } = await pool.query('SELECT name FROM users WHERE id <> $1', [viewerId]);
+  return [...new Set(rows.map((r) => normalize(String(r.name).replace(/\(.*?\)/g, '')).split(' ')[0]).filter((n) => n && n.length >= 3))];
+}
+
+/**
+ * Vendedor perguntando sobre outro colaborador ("quais os pedidos do Cassiano?").
+ * Vale para a IA e para o interpretador local; a resposta é neutra, sem dizer que é proibido.
+ */
+export async function asksAboutColleague(question: string, viewer: { id: string; role: string }): Promise<boolean> {
+  if (viewer.role !== 'vendedor') return false;
+  const q = normalize(question);
+  if (!/\b(pedid|vend|reserv|client|comiss|fatur|compr|negoci|meta|desempenho|resultado)/.test(q)) return false;
+  const words = q.split(' ');
+  const names = new Set(await otherPeopleNames(viewer.id));
+  // "cliente Carlos" é nome de cliente, não de colega
+  return words.some((w, i) => names.has(w) && !/^(client|empresa|loja|construtora)/.test(words[i - 1] ?? ''));
+}
+
+export const NO_INFO_ANSWER = 'Não tenho informações sobre isso.';
+
 export async function interpretLocally(question: string, ctx: ToolContext): Promise<{ answer: string; toolCalls: { name: string; input: unknown }[] }> {
   const q = normalize(question);
+  if (await asksAboutColleague(question, ctx.viewer)) return { answer: NO_INFO_ANSWER, toolCalls: [] };
   const calls: { name: string; input: unknown }[] = [];
   const run = async (name: string, input: unknown) => {
     calls.push({ name, input });
     return executeTool(name, input, ctx) as Promise<any>;
   };
   const refersToLast = /\b(desse|deste|esse|este|dele|mesmo)\b/.test(q) && ctx.lastProductId !== null;
-  const productOr = (extra: string[] = []) => (refersToLast && !productTerm(question, extra) ? 'esse' : productTerm(question, extra) || (ctx.lastProductId ? 'esse' : ''));
+  // código de produto digitado (OSTT-061545, W0956/00, ACESP0005): usado inteiro, sem tirar os números
+  const code = codeIn(question);
+  const productOr = (extra: string[] = []) =>
+    code ?? (refersToLast && !productTerm(question, extra) ? 'esse' : productTerm(question, extra) || (ctx.lastProductId ? 'esse' : ''));
 
   // --- cumprimentos e agradecimentos
   if (/^(oi|ola|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|ok|blz|beleza|tudo bem)\b[\s!.?]*$/.test(q)) {
@@ -161,6 +207,17 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
       answer: r.entradas.length
         ? `Entradas previstas${ate ? ` até ${brDate(ate)}` : ''}:\n${r.entradas.map((e: any) => `• ${e.produto}: ${fmt(e.quantidade)} — previsão ${e.previsao ?? 'não informada'} (compra ${e.pedido_compra ?? '?'}, ${e.fornecedor ?? 'fornecedor'})`).join('\n')}\n${r.observacao}`
         : `Não há entradas previstas${ate ? ` até ${brDate(ate)}` : ''}${term ? ' para esse produto' : ''}.`,
+      toolCalls: calls,
+    };
+  }
+  // --- "quantos pedidos temos?": conta só o que o colaborador pode ver (o vendedor, os dele)
+  if (/\bquant[oa]s?\b.*\b(pedidos?|vendas?)\b/.test(q)) {
+    const r = await run('pedidos_por_situacao', { situacao: 'confirmados' });
+    const mine = ctx.viewer.role === 'vendedor';
+    return {
+      answer: r.total
+        ? `${mine ? 'Você tem' : 'Há'} ${pl(r.total, 'pedido em aberto', 'pedidos em aberto')} prendendo estoque (ainda sem baixa no Bling):\n${r.pedidos.map((p: any) => `• Pedido ${p.pedido} — ${p.cliente} — ${p.itens}`).join('\n')}`
+        : `${mine ? 'Você não tem' : 'Não há'} pedidos em aberto prendendo estoque no momento.`,
       toolCalls: calls,
     };
   }
@@ -253,6 +310,9 @@ export async function interpretLocally(question: string, ctx: ToolContext): Prom
     };
   }
   const r = await run('consultar_disponibilidade', { produto: term });
+  if (r?.erro && /Não existe produto com o código/.test(r.erro) && !r.voce_quis_dizer?.length) {
+    return { answer: `${r.erro} Confira o código ou procure pelo nome.`, toolCalls: calls };
+  }
   if (r?.erro && /Nenhum produto/.test(r.erro)) {
     return {
       answer: `Não encontrei um produto com "${term}". Você pode:\n• informar o SKU ou parte do nome (ex.: "quanto temos do [SKU]?")\n• pedir a lista: "quais produtos estão disponíveis?"\n• usar a busca no topo da tela.`,

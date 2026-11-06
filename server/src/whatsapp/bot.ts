@@ -259,10 +259,12 @@ async function askAssistant(c: Ctx, question: string) {
   s.lastProductId = r.lastProductId;
 
   const candidates = r.cards.find((x): x is Extract<Card, { type: 'candidates' }> => x.type === 'candidates');
-  if (candidates && candidates.data.length > 1) {
+  if (candidates && candidates.data.length >= 1 && !r.cards.some((x) => x.type === 'availability')) {
     await sendList(
       c.to,
-      'Encontrei mais de um produto parecido. Qual deles?',
+      candidates.title === 'Você quis dizer?'
+        ? `Não encontrei esse código. Você quis dizer?`
+        : candidates.title ?? 'Encontrei mais de um produto parecido. Qual deles?',
       'Escolher produto',
       candidates.data.slice(0, 10).map((p) => ({ id: `p:${p.id}`, title: p.sku ?? p.name, description: p.name })),
       'Produtos',
@@ -510,6 +512,17 @@ async function resolveInto(c: Ctx, text: string, onFound: (id: number) => Promis
       'Escolher produto',
       res.ambiguous.slice(0, 10).map((p) => ({ id: `fp:${p.id}`, title: p.sku ?? p.name, description: p.name })),
       'Produtos',
+    );
+    return true;
+  }
+  if ('notFound' in res && res.suggestions?.length) {
+    setFlow(c.session, { ...flow, step: 'product' } as Flow);
+    await sendList(
+      c.to,
+      `Não encontrei o código *${text.trim()}*. Você quis dizer?`,
+      'Ver sugestões',
+      res.suggestions.slice(0, 10).map((p) => ({ id: `fp:${p.id}`, title: p.sku ?? p.name, description: p.name })),
+      'Sugestões',
     );
     return true;
   }
